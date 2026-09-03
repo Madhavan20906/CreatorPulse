@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "CreatorPulse"
+description = "An AI-powered creator growth loop that analyzes a channel, recommends what to make next, generates a content package, checks quality, and learns from performance."
+version = "1.0.0"
+id = "artifacts/creatorpulse"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 18318
+
+[services.development]
+run = "pnpm --filter @workspace/creatorpulse run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/creatorpulse", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/creatorpulse/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "18318"
+BASE_PATH = "/"

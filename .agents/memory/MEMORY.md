@@ -1,0 +1,1 @@
+- [CreatorPulse demo mode](creatorpulse-demo-mode.md) — keep the hackathon golden path runnable and honest without provider credentials.

@@ -10,6 +10,8 @@ servers:
 tags:
   - name: health
     description: Health operations
+  - name: creator
+    description: Creator growth loop operations
 paths:
   /healthz:
     get:
@@ -24,7 +26,208 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /pulse:
+    get:
+      operationId: getPulse
+      tags: [creator]
+      summary: Get the creator dashboard pulse
+      responses:
+        "200":
+          description: Dashboard pulse
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Pulse"
+  /channel:
+    get:
+      operationId: getChannel
+      tags: [creator]
+      summary: Get channel intelligence
+      responses:
+        "200":
+          description: Channel intelligence
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Channel"
+  /opportunities:
+    get:
+      operationId: listOpportunities
+      tags: [creator]
+      summary: List explainable content opportunities
+      responses:
+        "200":
+          description: Content opportunities
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Opportunity"
+  /opportunities/{id}:
+    get:
+      operationId: getOpportunity
+      tags: [creator]
+      summary: Get an opportunity with its reasoning
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200":
+          description: Opportunity
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Opportunity"
+        "404":
+          description: Opportunity not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /opportunities/{id}/generate:
+    post:
+      operationId: generateContent
+      tags: [creator]
+      summary: Generate a content package from an opportunity
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GenerationInput"
+      responses:
+        "200":
+          description: Generated content package
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ContentPackage"
+  /content/{id}:
+    get:
+      operationId: getContent
+      tags: [creator]
+      summary: Get a generated content package
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200":
+          description: Content package
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ContentPackage"
+  /content/{id}/qa:
+    post:
+      operationId: runQualityGate
+      tags: [creator]
+      summary: Run deterministic and AI-assisted content QA
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/QualityGateInput"
+      responses:
+        "200":
+          description: Content health score
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QualityReport"
+  /content/{id}/approve:
+    post:
+      operationId: approveContent
+      tags: [creator]
+      summary: Approve content for simulated scheduling
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApprovalInput"
+      responses:
+        "200":
+          description: Updated content package
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ContentPackage"
+  /before-publish:
+    post:
+      operationId: evaluateIdea
+      tags: [creator]
+      summary: Evaluate an idea before publishing
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/IdeaInput"
+      responses:
+        "200":
+          description: Counterfactual content evaluation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PrePublishEvaluation"
+  /measure:
+    post:
+      operationId: recordMeasurement
+      tags: [creator]
+      summary: Record performance and update creator memory
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MeasurementInput"
+      responses:
+        "200":
+          description: Measurement and learning result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LearningResult"
+  /memory:
+    get:
+      operationId: getMemory
+      tags: [creator]
+      summary: Get persistent creator memory
+      responses:
+        "200":
+          description: Creator memory
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreatorMemory"
+  /activity:
+    get:
+      operationId: listActivity
+      tags: [creator]
+      summary: Get the agent activity trace
+      responses:
+        "200":
+          description: Agent activity
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Activity"
 components:
+  parameters:
+    Id:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
   schemas:
     HealthStatus:
       type: object
@@ -33,4 +236,404 @@ components:
           type: string
       required:
         - status
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+      required: [error]
+    Pulse:
+      type: object
+      required:
+        - creatorName
+        - headline
+        - trend
+        - growthOpportunities
+        - contentReady
+        - pendingApproval
+        - publishedThisWeek
+        - baselineViews
+        - recommended
+        - recentActivity
+      properties:
+        creatorName: { type: string }
+        headline: { type: string }
+        trend: { type: string }
+        growthOpportunities: { type: number }
+        contentReady: { type: number }
+        pendingApproval: { type: number }
+        publishedThisWeek: { type: number }
+        baselineViews: { type: number }
+        recommended:
+          $ref: "#/components/schemas/Opportunity"
+        recentActivity:
+          type: array
+          items:
+            $ref: "#/components/schemas/Activity"
+    Channel:
+      type: object
+      required:
+        - name
+        - handle
+        - niche
+        - subscribers
+        - totalViews
+        - averageViews
+        - videosAnalyzed
+        - topTopic
+        - strongestFormat
+        - dataMode
+        - topics
+        - videos
+      properties:
+        name: { type: string }
+        handle: { type: string }
+        niche: { type: string }
+        subscribers: { type: number }
+        totalViews: { type: number }
+        averageViews: { type: number }
+        videosAnalyzed: { type: number }
+        topTopic: { type: string }
+        strongestFormat: { type: string }
+        dataMode: { type: string }
+        topics:
+          type: array
+          items:
+            $ref: "#/components/schemas/TopicPerformance"
+        videos:
+          type: array
+          items:
+            $ref: "#/components/schemas/Video"
+    TopicPerformance:
+      type: object
+      required: [name, views, performance, audienceFit, saturation]
+      properties:
+        name: { type: string }
+        views: { type: number }
+        performance: { type: string }
+        audienceFit: { type: number }
+        saturation: { type: number }
+    Video:
+      type: object
+      required: [id, title, topic, format, views, engagementRate, publishedAt, duration]
+      properties:
+        id: { type: string }
+        title: { type: string }
+        topic: { type: string }
+        format: { type: string }
+        views: { type: number }
+        engagementRate: { type: number }
+        publishedAt: { type: string }
+        duration: { type: string }
+        hook: { type: string }
+    Opportunity:
+      type: object
+      required:
+        - id
+        - title
+        - topic
+        - format
+        - score
+        - audienceFit
+        - novelty
+        - historicalFit
+        - collisionRisk
+        - effort
+        - confidence
+        - rationale
+        - signals
+        - prediction
+      properties:
+        id: { type: string }
+        title: { type: string }
+        topic: { type: string }
+        format: { type: string }
+        score: { type: number }
+        audienceFit: { type: number }
+        novelty: { type: number }
+        historicalFit: { type: number }
+        collisionRisk: { type: number }
+        effort: { type: string }
+        confidence: { type: string }
+        rationale: { type: string }
+        signals:
+          type: array
+          items: { type: string }
+        prediction:
+          $ref: "#/components/schemas/Prediction"
+        status: { type: string }
+    Prediction:
+      type: object
+      required: [direction, confidence, baselineMultiplier]
+      properties:
+        direction: { type: string }
+        confidence: { type: number }
+        baselineMultiplier: { type: number }
+    GenerationInput:
+      type: object
+      required: [voice]
+      properties:
+        voice: { type: string }
+        extraContext: { type: string }
+    ContentPackage:
+      type: object
+      required:
+        - id
+        - opportunityId
+        - title
+        - hook
+        - outline
+        - script
+        - chapters
+        - cta
+        - description
+        - shorts
+        - social
+        - seo
+        - thumbnail
+        - status
+      properties:
+        id: { type: string }
+        opportunityId: { type: string }
+        title: { type: string }
+        hook: { type: string }
+        outline:
+          type: array
+          items: { type: string }
+        script: { type: string }
+        chapters:
+          type: array
+          items: { type: string }
+        cta: { type: string }
+        description: { type: string }
+        shorts:
+          type: array
+          items:
+            $ref: "#/components/schemas/ShortCandidate"
+        social:
+          $ref: "#/components/schemas/SocialPackage"
+        seo:
+          $ref: "#/components/schemas/SeoPackage"
+        thumbnail:
+          $ref: "#/components/schemas/ThumbnailConcept"
+        status: { type: string }
+        prediction:
+          $ref: "#/components/schemas/Prediction"
+    ShortCandidate:
+      type: object
+      required: [id, title, hook, script, score, duration, sourceSegment, caption, hashtags]
+      properties:
+        id: { type: string }
+        title: { type: string }
+        hook: { type: string }
+        script: { type: string }
+        score: { type: number }
+        duration: { type: string }
+        sourceSegment: { type: string }
+        caption: { type: string }
+        hashtags:
+          type: array
+          items: { type: string }
+    SocialPackage:
+      type: object
+      required: [xThread, linkedin, instagram]
+      properties:
+        xThread: { type: string }
+        linkedin: { type: string }
+        instagram: { type: string }
+    SeoPackage:
+      type: object
+      required: [primaryKeyword, secondaryKeywords, titleVariants, tags]
+      properties:
+        primaryKeyword: { type: string }
+        secondaryKeywords:
+          type: array
+          items: { type: string }
+        titleVariants:
+          type: array
+          items: { type: string }
+        tags:
+          type: array
+          items: { type: string }
+    ThumbnailConcept:
+      type: object
+      required: [concept, composition, text, emotionalAngle]
+      properties:
+        concept: { type: string }
+        composition: { type: string }
+        text: { type: string }
+        emotionalAngle: { type: string }
+    QualityGateInput:
+      type: object
+      required: [title, description, script, cta, keywords]
+      properties:
+        title: { type: string }
+        description: { type: string }
+        script: { type: string }
+        cta: { type: string }
+        keywords:
+          type: array
+          items: { type: string }
+    QualityReport:
+      type: object
+      required:
+        - overall
+        - checks
+        - passed
+        - summary
+        - claimRisk
+      properties:
+        overall: { type: number }
+        claimRisk: { type: number }
+        passed: { type: boolean }
+        summary: { type: string }
+        checks:
+          type: array
+          items:
+            $ref: "#/components/schemas/QualityCheck"
+    QualityCheck:
+      type: object
+      required: [name, score, status, detail]
+      properties:
+        name: { type: string }
+        score: { type: number }
+        status: { type: string }
+        detail: { type: string }
+    ApprovalInput:
+      type: object
+      required: [scheduledFor]
+      properties:
+        scheduledFor: { type: string }
+        notes: { type: string }
+    IdeaInput:
+      type: object
+      required: [idea]
+      properties:
+        idea: { type: string, minLength: 1 }
+    PrePublishEvaluation:
+      type: object
+      required:
+        - idea
+        - opportunity
+        - audienceFit
+        - novelty
+        - collisionRisk
+        - historicalFit
+        - recommendation
+        - explanation
+        - suggestedAlternative
+        - similarVideos
+      properties:
+        idea: { type: string }
+        opportunity: { type: number }
+        audienceFit: { type: number }
+        novelty: { type: number }
+        collisionRisk: { type: number }
+        historicalFit: { type: number }
+        recommendation: { type: string }
+        explanation: { type: string }
+        suggestedAlternative: { type: string }
+        similarVideos:
+          type: array
+          items:
+            $ref: "#/components/schemas/SimilarityMatch"
+    SimilarityMatch:
+      type: object
+      required: [videoTitle, similarity]
+      properties:
+        videoTitle: { type: string }
+        similarity: { type: number }
+    MeasurementInput:
+      type: object
+      required: [contentId, views, likes, comments]
+      properties:
+        contentId: { type: string }
+        views: { type: number }
+        likes: { type: number }
+        comments: { type: number }
+        subscribersGained: { type: number }
+    LearningResult:
+      type: object
+      required:
+        - contentId
+        - baselineViews
+        - actualViews
+        - relativePerformance
+        - predictionDirection
+        - result
+        - newLearning
+        - memoryVersion
+      properties:
+        contentId: { type: string }
+        baselineViews: { type: number }
+        actualViews: { type: number }
+        relativePerformance: { type: number }
+        predictionDirection: { type: string }
+        result: { type: string }
+        newLearning: { type: string }
+        memoryVersion: { type: number }
+    CreatorMemory:
+      type: object
+      required:
+        - version
+        - identity
+        - topicMemory
+        - formatMemory
+        - hookMemory
+        - timingMemory
+        - learnings
+      properties:
+        version: { type: number }
+        identity:
+          $ref: "#/components/schemas/CreatorIdentity"
+        topicMemory:
+          type: array
+          items:
+            $ref: "#/components/schemas/MemorySignal"
+        formatMemory:
+          type: array
+          items:
+            $ref: "#/components/schemas/MemorySignal"
+        hookMemory:
+          type: array
+          items:
+            $ref: "#/components/schemas/MemorySignal"
+        timingMemory:
+          type: array
+          items:
+            $ref: "#/components/schemas/MemorySignal"
+        learnings:
+          type: array
+          items: { type: string }
+    CreatorIdentity:
+      type: object
+      required: [name, niche, audience, goals, tone, platforms]
+      properties:
+        name: { type: string }
+        niche: { type: string }
+        audience: { type: string }
+        goals:
+          type: array
+          items: { type: string }
+        tone: { type: string }
+        platforms:
+          type: array
+          items: { type: string }
+    MemorySignal:
+      type: object
+      required: [label, signal, confidence]
+      properties:
+        label: { type: string }
+        signal: { type: string }
+        confidence: { type: number }
+    Activity:
+      type: object
+      required: [id, agent, action, detail, timestamp, status]
+      properties:
+        id: { type: string }
+        agent: { type: string }
+        action: { type: string }
+        detail: { type: string }
+        timestamp: { type: string }
+        status: { type: string }
 
