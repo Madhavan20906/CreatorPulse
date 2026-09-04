@@ -24,7 +24,8 @@ CreatorPulse is a YouTube-first creator operating system that turns channel sign
 
 - `artifacts/creatorpulse/src/pages/pages.tsx` — user-facing golden path pages
 - `artifacts/creatorpulse/src/components/shell.tsx` — shared command-center shell
-- `artifacts/api-server/src/routes/creator.ts` — growth-loop API routes and deterministic engines
+- `artifacts/api-server/src/routes/creator.ts` — growth-loop API routes, Gemini orchestration, and deterministic engines
+- `artifacts/api-server/src/lib/gemini.ts` — direct Gemini API client using the secure `GEMINI_API_KEY`
 - `artifacts/api-server/src/lib/creator-state.ts` — seeded demo channel and persisted Creator Memory state
 - `lib/api-spec/openapi.yaml` — API contract source of truth
 - `lib/db/src/schema/creator-state.ts` — PostgreSQL persistence model
@@ -33,7 +34,7 @@ CreatorPulse is a YouTube-first creator operating system that turns channel sign
 ## Architecture decisions
 
 - The first build prioritizes one complete growth loop over broad social-platform coverage.
-- Numeric opportunity and QA scores are deterministic and explainable; the demo does not fabricate certainty.
+- Numeric opportunity and QA scores remain deterministic and explainable; Gemini enriches content generation without owning the scoring contract.
 - The demo channel is intentionally labeled as public/demo data, and scheduling is explicitly simulated until platform credentials exist.
 - Creator Memory is persisted as a JSONB state row so the feedback loop survives refreshes without overbuilding infrastructure.
 
@@ -48,7 +49,7 @@ The user wants the product optimized to win the AI Content Engine Hackathon by d
 ## Gotchas
 
 - Run `pnpm --filter @workspace/api-spec run codegen` after changing `lib/api-spec/openapi.yaml`.
-- The demo stays usable without an external LLM key; do not label deterministic generation as live model output.
+- `GEMINI_API_KEY` is optional for local/demo resilience; when present, generated packages are labeled Gemini-generated and fall back explicitly if the provider is unavailable.
 
 ## Pointers
 

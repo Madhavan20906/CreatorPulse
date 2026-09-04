@@ -23,6 +23,7 @@ import {
   RunQualityGateParams,
   RunQualityGateResponse,
 } from "@workspace/api-zod";
+import { generateGeminiJson } from "../lib/gemini";
 import {
   addActivity,
   findContent,
@@ -83,13 +84,14 @@ router.post("/opportunities/:id/generate", async (req, res): Promise<void> => {
     return;
   }
 
-  const content = buildContentPackage(opportunity, body.data.voice);
+  const generated = await buildContentPackage(opportunity, body.data.voice, body.data.extraContext);
+  const content = generated.content;
   state.contentPackages[content.id] = content;
   opportunity.status = "in production";
   addActivity(state, {
     agent: "Content Factory",
     action: "Generated content package",
-    detail: `${content.shorts.length} Shorts, SEO metadata, and a long-form script ready for review`,
+    detail: `${generated.source === "gemini" ? "Gemini-generated" : "Deterministic fallback"} · ${content.shorts.length} Shorts, SEO metadata, and a long-form script ready for review`,
     timestamp: "Just now",
     status: "complete",
   });
@@ -259,7 +261,78 @@ router.get("/activity", async (_req, res): Promise<void> => {
   res.json(ListActivityResponse.parse(state.activity));
 });
 
-function buildContentPackage(opportunity: any, voice: string): any {
+async function buildContentPackage(opportunity: any, voice: string, extraContext = ""): Promise<{ content: any; source: "gemini" | "deterministic" }> {
+  const fallback = buildDeterministicContentPackage(opportunity, voice);
+  try {
+    const generated = await generateGeminiJson(buildGeminiPrompt(opportunity, voice, extraContext));
+    const content = normalizeGeminiPackage(generated, fallback);
+    if (content) return { content, source: "gemini" };
+  } catch (error) {
+    console.warn("Gemini content generation failed; using deterministic fallback.", error instanceof Error ? error.message : "unknown error");
+  }
+  return { content: fallback, source: "deterministic" };
+}
+
+function buildGeminiPrompt(opportunity: any, voice: string, extraContext: string): string {
+  return `You are the content strategist inside CreatorPulse, a creator growth operating system.
+
+Create a coherent YouTube content package for this opportunity:
+${JSON.stringify({
+  title: opportunity.title,
+  topic: opportunity.topic,
+  format: opportunity.format,
+  rationale: opportunity.rationale,
+  signals: opportunity.signals,
+  prediction: opportunity.prediction,
+})}
+
+Creator voice: ${voice}
+Additional context: ${extraContext || "None"}
+
+Return ONLY valid JSON with exactly these fields:
+{
+  "title": "string",
+  "hook": "string",
+  "outline": ["4 concise section titles"],
+  "script": "a useful 700-1100 word draft with concrete reasoning",
+  "chapters": ["4 timestamped chapter labels"],
+  "cta": "one specific, natural call to action",
+  "description": "a platform-ready description of at least 100 characters",
+  "shorts": [
+    {
+      "title": "string",
+      "hook": "string",
+      "script": "string",
+      "score": 0,
+      "duration": "0:00",
+      "sourceSegment": "00:00-00:30",
+      "caption": "string",
+      "hashtags": ["#tag"]
+    }
+  ],
+  "social": {
+    "xThread": "string",
+    "linkedin": "string",
+    "instagram": "string"
+  },
+  "seo": {
+    "primaryKeyword": "string",
+    "secondaryKeywords": ["string"],
+    "titleVariants": ["string", "string", "string"],
+    "tags": ["${opportunity.topic}", "AI engineering", "developer tools", "MCP", "software architecture"]
+  },
+  "thumbnail": {
+    "concept": "string",
+    "composition": "string",
+    "text": "short thumbnail text",
+    "emotionalAngle": "string"
+  }
+}
+
+Keep the package specific to the opportunity. Do not invent performance guarantees, unsupported statistics, or claims of live publishing.`;
+}
+
+function buildDeterministicContentPackage(opportunity: any, voice: string): any {
   const cleanTopic = opportunity.topic.toLowerCase();
   const id = `content-${opportunity.id}`;
   const hook = `Most creators talk about ${cleanTopic} like it is a feature. The useful question is what happens when it meets a real production constraint.`;
@@ -348,6 +421,69 @@ function buildContentPackage(opportunity: any, voice: string): any {
   };
 }
 
+function normalizeGeminiPackage(raw: unknown, fallback: any): any | null {
+  if (!raw || typeof raw !== "object") return null;
+  const value = raw as Record<string, unknown>;
+  const stringValue = (candidate: unknown, defaultValue: string) => typeof candidate === "string" && candidate.trim() ? candidate.trim() : defaultValue;
+  const stringArray = (candidate: unknown, defaultValue: string[]) => Array.isArray(candidate) && candidate.every((item) => typeof item === "string") && candidate.length ? candidate as string[] : defaultValue;
+  const rawShorts = Array.isArray(value.shorts) ? value.shorts : [];
+  const shorts = fallback.shorts.map((defaultShort: any, index: number) => {
+    const candidate = rawShorts[index];
+    if (!candidate || typeof candidate !== "object") return defaultShort;
+    const short = candidate as Record<string, unknown>;
+    return {
+      ...defaultShort,
+      title: stringValue(short.title, defaultShort.title),
+      hook: stringValue(short.hook, defaultShort.hook),
+      script: stringValue(short.script, defaultShort.script),
+      score: typeof short.score === "number" ? Math.max(0, Math.min(100, Math.round(short.score))) : defaultShort.score,
+      duration: stringValue(short.duration, defaultShort.duration),
+      sourceSegment: stringValue(short.sourceSegment, defaultShort.sourceSegment),
+      caption: stringValue(short.caption, defaultShort.caption),
+      hashtags: stringArray(short.hashtags, defaultShort.hashtags),
+    };
+  });
+  const social = value.social && typeof value.social === "object" ? value.social as Record<string, unknown> : {};
+  const seo = value.seo && typeof value.seo === "object" ? value.seo as Record<string, unknown> : {};
+  const generatedTags = stringArray(seo.tags, []);
+  const tags = Array.from(new Set([...generatedTags, ...fallback.seo.tags])).slice(0, 8);
+  const thumbnail = value.thumbnail && typeof value.thumbnail === "object" ? value.thumbnail as Record<string, unknown> : {};
+  const description = stringValue(value.description, fallback.description);
+  const missingKeywords = fallback.seo.tags.filter((tag: string) => !description.toLowerCase().includes(tag.toLowerCase()));
+  const enrichedDescription = missingKeywords.length
+    ? `${description}\n\nKeywords: ${missingKeywords.join(", ")}.`
+    : description;
+
+  return {
+    ...fallback,
+    title: stringValue(value.title, fallback.title),
+    hook: stringValue(value.hook, fallback.hook),
+    outline: stringArray(value.outline, fallback.outline),
+    script: stringValue(value.script, fallback.script),
+    chapters: stringArray(value.chapters, fallback.chapters),
+    cta: stringValue(value.cta, fallback.cta),
+    description: enrichedDescription,
+    shorts,
+    social: {
+      xThread: stringValue(social.xThread, fallback.social.xThread),
+      linkedin: stringValue(social.linkedin, fallback.social.linkedin),
+      instagram: stringValue(social.instagram, fallback.social.instagram),
+    },
+    seo: {
+      primaryKeyword: stringValue(seo.primaryKeyword, fallback.seo.primaryKeyword),
+      secondaryKeywords: stringArray(seo.secondaryKeywords, fallback.seo.secondaryKeywords),
+      titleVariants: stringArray(seo.titleVariants, fallback.seo.titleVariants),
+      tags: tags.length ? tags : fallback.seo.tags,
+    },
+    thumbnail: {
+      concept: stringValue(thumbnail.concept, fallback.thumbnail.concept),
+      composition: stringValue(thumbnail.composition, fallback.thumbnail.composition),
+      text: stringValue(thumbnail.text, fallback.thumbnail.text),
+      emotionalAngle: stringValue(thumbnail.emotionalAngle, fallback.thumbnail.emotionalAngle),
+    },
+  };
+}
+
 function calculateQuality(input: any): any {
   const titleScore = input.title.length >= 35 && input.title.length <= 70 ? 94 : input.title.length > 20 ? 78 : 52;
   const descriptionScore = input.description.length >= 100 ? 92 : input.description.length >= 60 ? 76 : 48;
@@ -355,9 +491,12 @@ function calculateQuality(input: any): any {
   const keywordText = `${input.title} ${input.description} ${input.script}`.toLowerCase();
   const matchedKeywords = input.keywords.filter((keyword: string) => keywordText.includes(keyword.toLowerCase())).length;
   const seoScore = Math.round((matchedKeywords / Math.max(input.keywords.length, 1)) * 100);
-  const repeatedPhrase = /(demo|production|agent)/gi;
-  const repeatedCount = (input.script.match(repeatedPhrase) ?? []).length;
-  const originalityScore = repeatedCount > 10 ? 70 : 90;
+  const sentences = input.script
+    .split(/[.!?]\s+/)
+    .map((sentence: string) => sentence.trim().toLowerCase())
+    .filter(Boolean);
+  const repeatedSentenceCount = sentences.length - new Set(sentences).size;
+  const originalityScore = repeatedSentenceCount > 1 ? 70 : 90;
   const checks = [
     { name: "Hook strength", score: titleScore, status: titleScore >= 75 ? "pass" : "revise", detail: "Title creates a clear tension between a familiar promise and a real constraint." },
     { name: "Audience fit", score: 95, status: "pass", detail: "Language and examples match the creator's developer audience." },

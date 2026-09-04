@@ -109,8 +109,8 @@ GET  /api/activity
 
 - Channel metrics are an explicit demo/public-metrics sample; private YouTube analytics are not fabricated.
 - Publishing is simulated and labeled as such until a legitimate platform adapter is connected.
-- The content package uses the deterministic strategy engine when no external LLM provider is available. This keeps the core loop reliable and inspectable.
-- A production version would add YouTube OAuth, live YouTube Analytics ingestion, background jobs, object storage for media, and a provider-backed content reasoning layer.
+- When `GEMINI_API_KEY` is configured, content packages are generated through Gemini and normalized into the CreatorPulse contract. If Gemini is unavailable, the deterministic strategy engine keeps the core loop reliable and inspectable.
+- A production version would add YouTube OAuth, live YouTube Analytics ingestion, background jobs, object storage for media, and a provider-backed QA reasoning layer.
 
 ## Submission positioning
 
