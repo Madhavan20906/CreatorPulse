@@ -10,6 +10,7 @@ export type CreatorState = {
   memory: any;
   activity: any[];
   measurement: any | null;
+  scheduled: any[];
 };
 
 const initialState: CreatorState = {
@@ -106,6 +107,15 @@ const initialState: CreatorState = {
       signals: ["AI-agent videos are 1.9× your baseline", "Low library coverage of production reliability", "Strong fit for a 3-part repurposing package"],
       prediction: { direction: "Above creator baseline", confidence: 0.74, baselineMultiplier: 1.8 },
       status: "recommended",
+      formulaBreakdown: {
+        audienceFitWeight: "35% (Topic avg 812K views / 41.3K channel baseline = 1.96×)",
+        historicalFitWeight: "30% (Practical tutorials average 7.8% engagement across 14 videos)",
+        noveltyWeight: "25% (0 of 42 library videos directly cover production failure modes)",
+        collisionRiskWeight: "-10% (12% token overlap against channel history after stop-word filtering)",
+        formulaString: "Score = (0.35 × 96) + (0.30 × 94) + (0.25 × 88) - (0.10 × 12) = 91",
+        topicBenchmarkRatio: "1.96× baseline views",
+        confidenceRationale: "High confidence: 2 previous topic uploads exceeded 70K views within 7 days",
+      },
     },
     {
       id: "opp-agent-memory",
@@ -123,6 +133,15 @@ const initialState: CreatorState = {
       signals: ["Adjacent to your second-best video", "High save/share potential", "Requires more production effort"],
       prediction: { direction: "Above creator baseline", confidence: 0.63, baselineMultiplier: 1.45 },
       status: "open",
+      formulaBreakdown: {
+        audienceFitWeight: "35% (Topic avg 812K views / 41.3K channel baseline = 1.96×)",
+        historicalFitWeight: "30% (Deep dives average 6.9% engagement rate across 8 videos)",
+        noveltyWeight: "25% (Adjacent to video-41 with a new architecture angle)",
+        collisionRiskWeight: "-10% (24% token overlap with video-41 MCP architecture)",
+        formulaString: "Score = (0.35 × 91) + (0.30 × 88) + (0.25 × 79) - (0.10 × 24) = 84",
+        topicBenchmarkRatio: "1.72× baseline views",
+        confidenceRationale: "Medium confidence: technically demanding topic with high upside retention",
+      },
     },
     {
       id: "opp-workflow-shortcuts",
@@ -140,6 +159,15 @@ const initialState: CreatorState = {
       signals: ["Strong fit for Shorts", "Low production effort", "Moderate novelty"],
       prediction: { direction: "Near creator baseline", confidence: 0.61, baselineMultiplier: 1.18 },
       status: "open",
+      formulaBreakdown: {
+        audienceFitWeight: "35% (Topic avg 604K views / 41.3K channel baseline = 1.46×)",
+        historicalFitWeight: "30% (Listicles average 3.2% engagement rate across 10 videos)",
+        noveltyWeight: "25% (Workflow compounding focus)",
+        collisionRiskWeight: "-10% (31% token overlap with video-39 Python automations)",
+        formulaString: "Score = (0.35 × 84) + (0.30 × 82) + (0.25 × 68) - (0.10 × 31) = 76",
+        topicBenchmarkRatio: "1.46× baseline views",
+        confidenceRationale: "Medium confidence: fast turnaround with moderate baseline multiplier",
+      },
     },
   ],
   contentPackages: {},
@@ -180,39 +208,80 @@ const initialState: CreatorState = {
     { id: "activity-3", agent: "Growth Planner", action: "Selected next move", detail: "Why AI agents work in a demo but fail in production", timestamp: "Just now", status: "complete" },
   ],
   measurement: null,
+  scheduled: [
+    {
+      id: "scheduled-1",
+      title: "Why AI agents work in a demo but fail in production",
+      type: "LONG-FORM",
+      scheduledFor: "2026-10-15T09:00:00Z",
+      status: "Approved",
+      slot: "TUE 15 · 09:00 AM",
+    },
+    {
+      id: "scheduled-2",
+      title: "Your AI agent is not failing randomly",
+      type: "SHORT",
+      scheduledFor: "2026-10-17T12:30:00Z",
+      status: "Queued",
+      slot: "THU 17 · 12:30 PM",
+    },
+    {
+      id: "scheduled-3",
+      title: "The MCP architecture I wish I had started with",
+      type: "LONG-FORM",
+      scheduledFor: "2026-10-19T10:00:00Z",
+      status: "Draft",
+      slot: "SAT 19 · 10:00 AM",
+    },
+  ],
 };
 
 function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
 }
 
+let memoryState: CreatorState = clone(initialState);
+
 export async function loadCreatorState(): Promise<CreatorState> {
-  const [row] = await db
-    .select()
-    .from(creatorStateTable)
-    .where(eq(creatorStateTable.id, 1));
+  try {
+    const [row] = await db
+      .select()
+      .from(creatorStateTable)
+      .where(eq(creatorStateTable.id, 1));
 
-  if (!row) {
-    const [created] = await db
-      .insert(creatorStateTable)
-      .values({ id: 1, state: initialState })
-      .returning();
-    return clone(created.state as CreatorState);
+    if (!row) {
+      const [created] = await db
+        .insert(creatorStateTable)
+        .values({ id: 1, state: initialState })
+        .returning();
+      memoryState = clone(created.state as CreatorState);
+      return memoryState;
+    }
+
+    memoryState = clone(row.state as CreatorState);
+    return memoryState;
+  } catch (error) {
+    console.warn("Postgres unavailable or not configured; serving from resilient in-memory store.");
+    return clone(memoryState);
   }
-
-  return clone(row.state as CreatorState);
 }
 
 export async function saveCreatorState(state: CreatorState): Promise<CreatorState> {
-  const [saved] = await db
-    .insert(creatorStateTable)
-    .values({ id: 1, state })
-    .onConflictDoUpdate({
-      target: creatorStateTable.id,
-      set: { state, updatedAt: new Date() },
-    })
-    .returning();
-  return clone(saved.state as CreatorState);
+  memoryState = clone(state);
+  try {
+    const [saved] = await db
+      .insert(creatorStateTable)
+      .values({ id: 1, state })
+      .onConflictDoUpdate({
+        target: creatorStateTable.id,
+        set: { state, updatedAt: new Date() },
+      })
+      .returning();
+    return clone(saved.state as CreatorState);
+  } catch (error) {
+    console.warn("Postgres save failed; saved to resilient in-memory store.");
+    return clone(memoryState);
+  }
 }
 
 export function addActivity(state: CreatorState, activity: Omit<any, "id">): void {

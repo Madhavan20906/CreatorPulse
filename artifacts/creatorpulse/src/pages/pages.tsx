@@ -1,7 +1,24 @@
-import { Activity, ArrowUpRight, BarChart3, Check, CheckCircle2, ChevronRight, CircleAlert, Clock3, Copy, FileText, Filter, Play, Plus, RefreshCw, ShieldCheck, Sparkles, Target, TrendingUp, Upload, Users, Wand2 } from 'lucide-react';
+import { Activity, ArrowUpRight, BarChart3, Check, CheckCircle2, ChevronRight, CircleAlert, Clock3, Copy, Download, FileText, Filter, Info, Play, Plus, RefreshCw, ShieldCheck, Sparkles, Target, TrendingUp, Upload, Users, Wand2 } from 'lucide-react';
 import { FormEvent, useEffect, useState } from 'react';
 import { Link, useLocation, useParams } from 'wouter';
-import { useApproveContent, useEvaluateIdea, useGenerateContent, useGetChannel, useGetContent, useGetMemory, useGetOpportunity, useGetPulse, useListActivity, useListOpportunities, useRecordMeasurement, useRunQualityGate } from '@workspace/api-client-react';
+import { toast } from 'sonner';
+import {
+  useApproveContent,
+  useEvaluateIdea,
+  useGenerateContent,
+  useGetCalendar,
+  useGetChannel,
+  useGetContent,
+  useGetMemory,
+  useGetOpportunity,
+  useGetPulse,
+  useGetSettings,
+  useListActivity,
+  useListOpportunities,
+  useRecordMeasurement,
+  useRunQualityGate,
+  useUpdateSettings,
+} from '@workspace/api-client-react';
 import type { Activity as ActivityType, ContentPackage, Opportunity, QualityReport } from '@workspace/api-client-react';
 import { Button, EmptyState, ErrorState, LoadingState, Meter, PageIntro, Shell } from '@/components/shell';
 
@@ -9,6 +26,65 @@ const money = (n: number) => n >= 1000000 ? `${(n / 1000000).toFixed(1)}M` : n >
 const scoreTone = (n: number) => n >= 80 ? 'text-[#72920f]' : n >= 60 ? 'text-[#c36b4d]' : 'text-muted-foreground';
 const getLastContentId = () => typeof window === 'undefined' ? 'demo-content' : window.localStorage.getItem('creatorpulse:lastContentId') || 'demo-content';
 const activityTime = (timestamp: string) => timestamp.includes('ago') || timestamp === 'Just now' ? timestamp : new Date(timestamp).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+
+const copyToClipboard = async (text: string, label = 'Content') => {
+  try {
+    await navigator.clipboard.writeText(text);
+    toast.success(`${label} copied to clipboard`);
+  } catch {
+    toast.error('Failed to copy to clipboard');
+  }
+};
+
+const exportPackage = (pkg: ContentPackage) => {
+  const md = `# ${pkg.title}
+**Status**: ${pkg.status} | **Package ID**: ${pkg.id}
+
+## Hook
+${pkg.hook}
+
+## Script Draft
+${pkg.script}
+
+## Call to Action
+${pkg.cta}
+
+## Chapters
+${pkg.chapters?.map((ch, i) => `${i + 1}. ${ch}`).join('\n') || 'None'}
+
+## SEO Strategy
+- **Primary Keyword**: ${pkg.seo?.primaryKeyword || 'N/A'}
+- **Secondary Keywords**: ${pkg.seo?.secondaryKeywords?.join(', ') || 'N/A'}
+- **Title Variants**:
+${pkg.seo?.titleVariants?.map(v => `  - ${v}`).join('\n') || '  - None'}
+
+## Shorts Candidates
+${pkg.shorts?.map((s, i) => `### Candidate #${i + 1}: ${s.title} (Score: ${s.score}/100)
+- **Duration**: ${s.duration}
+- **Source Segment**: ${s.sourceSegment}
+- **Hook**: ${s.hook}
+- **Script**: ${s.script}
+- **Hashtags**: ${s.hashtags?.join(' ') || ''}
+`).join('\n') || 'None'}
+
+## Thumbnail Direction
+- **Overlay Text**: "${pkg.thumbnail?.text || ''}"
+- **Concept**: ${pkg.thumbnail?.concept || ''}
+- **Composition**: ${pkg.thumbnail?.composition || ''}
+- **Emotional Angle**: ${pkg.thumbnail?.emotionalAngle || ''}
+`;
+
+  const blob = new Blob([md], { type: 'text/markdown;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.setAttribute('download', `creatorpulse-${pkg.id || 'package'}.md`);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+  toast.success(`Exported markdown package (creatorpulse-${pkg.id || 'package'}.md)`);
+};
 function Stat({ label, value, change, icon: Icon, coral = false }: { label: string; value: string | number; change?: string; icon: typeof Activity; coral?: boolean }) {
   return <div className="panel p-5"><div className="flex items-center justify-between"><span className="eyebrow">{label}</span><span className={`grid h-8 w-8 place-items-center rounded-xl ${coral ? 'bg-[#fbe1d6] text-[#c36b4d]' : 'bg-[#edf3c9] text-[#72920f]'}`}><Icon size={15}/></span></div><div className="mt-5 flex items-baseline gap-2"><span className="display text-3xl font-bold">{value}</span>{change && <span className="mono text-[10px] text-[#72920f]">{change}</span>}</div></div>;
 }
@@ -19,16 +95,16 @@ function ActivityFeed({ items }: { items?: ActivityType[] }) {
 
 export function Landing() {
   return <div className="min-h-[100dvh] overflow-hidden bg-[#20243b] text-[#f2eedf]"><div className="mx-auto max-w-[1400px] px-6 py-6 md:px-12"><div className="flex items-center justify-between"><div className="flex items-center gap-3"><span className="grid h-9 w-9 place-items-center rounded-xl bg-[#d8f66a] text-[#20243b]"><span className="h-3 w-3 rounded-full border-[3px] border-current"/></span><span className="display text-lg font-bold">CreatorPulse</span></div><Link href="/onboarding" className="rounded-xl border border-[#4a4e65] px-4 py-2 text-xs font-bold hover:bg-[#2a2e47]" data-testid="link-start-top">Enter demo <ArrowUpRight size={14} className="ml-1 inline"/></Link></div>
-      <section className="relative grid min-h-[660px] items-center py-20 lg:grid-cols-[1.08fr_.92fr] lg:gap-20"><div className="absolute -right-40 top-20 h-[480px] w-[480px] rounded-full bg-[#d8f66a]/10 blur-3xl"/><div className="relative z-[1] animate-enter"><div className="eyebrow !text-[#d8f66a]">The creator operating system</div><h1 className="display mt-5 max-w-3xl text-6xl font-bold leading-[.94] tracking-[-.07em] md:text-8xl">Make the next <span className="text-[#d8f66a]">right</span> thing.</h1><p className="mt-7 max-w-xl text-base leading-7 text-[#b9b8bd]">CreatorPulse turns your channel’s performance into a clear next move — then carries it from idea to publish to learning.</p><Button href="/onboarding" variant="coral" testId="button-enter-demo">Open the command center <ArrowUpRight size={15}/></Button><div className="mt-8 flex items-center gap-4"><span className="mono text-[10px] text-[#7e8090]">BUILT FOR SERIOUS CREATORS</span><span className="h-px w-16 bg-[#55586b]"/><span className="mono text-[10px] text-[#7e8090]">YOUTUBE-FIRST</span></div></div><div className="relative mt-12 lg:mt-0"><div className="rounded-[24px] border border-[#52556c] bg-[#292d47] p-5 shadow-2xl shadow-black/20"><div className="flex items-center justify-between border-b border-[#464a61] pb-4"><div><div className="mono text-[9px] uppercase tracking-widest text-[#9193a1]">Today's pulse</div><div className="mt-1 text-sm font-bold">One move has signal.</div></div><span className="rounded-full bg-[#d8f66a] px-2 py-1 mono text-[9px] font-bold text-[#20243b]">LIVE</span></div><div className="mt-5 rounded-2xl bg-[#20243b] p-4"><div className="flex justify-between"><div className="eyebrow !text-[#9193a1]">Recommended next</div><span className="mono text-xs text-[#d8f66a]">92 / 100</span></div><div className="display mt-3 text-2xl font-bold">The hidden cost of “productive” tools</div><p className="mt-2 text-xs leading-5 text-[#aaabb6]">Your audience responds to sharp reframes on creator workflow. This keeps the tension, adds a fresh mechanism.</p><div className="mt-5 flex gap-2"><span className="rounded-lg bg-[#353a55] px-2 py-1 mono text-[9px] text-[#b8b8bf]">ESSAY</span><span className="rounded-lg bg-[#353a55] px-2 py-1 mono text-[9px] text-[#b8b8bf]">HIGH FIT</span></div></div><div className="mt-4 grid grid-cols-3 gap-2">{['UNDERSTAND','DECIDE','CREATE'].map((t, i) => <div key={t} className="rounded-xl border border-[#464a61] px-3 py-3"><div className="mono text-[9px] text-[#9193a1]">0{i + 2}</div><div className="mt-2 text-[10px] font-bold">{t}</div><div className="mt-2 h-1 rounded-full bg-[#d8f66a]" style={{ width: `${[100, 75, 38][i]}%` }}/></div>)}</div></div></div></section>
+      <section className="relative grid min-h-[660px] items-center py-20 lg:grid-cols-[1.08fr_.92fr] lg:gap-20"><div className="absolute -right-40 top-20 h-[480px] w-[480px] rounded-full bg-[#d8f66a]/10 blur-3xl"/><div className="relative z-[1] animate-enter"><div className="eyebrow !text-[#d8f66a]">The creator operating system</div><h1 className="display mt-5 max-w-3xl text-6xl font-bold leading-[.94] tracking-[-.07em] md:text-8xl">Make the next <span className="text-[#d8f66a]">right</span> thing.</h1><p className="mt-7 max-w-xl text-base leading-7 text-[#b9b8bd]">CreatorPulse turns your channel’s performance into a clear next move — then carries it from idea to publish to learning.</p><Button href="/onboarding" variant="coral" testId="button-enter-demo">Open the command center <ArrowUpRight size={15}/></Button><div className="mt-8 flex items-center gap-4"><span className="mono text-[10px] text-[#7e8090]">BUILT FOR SERIOUS CREATORS</span><span className="h-px w-16 bg-[#55586b]"/><span className="mono text-[10px] text-[#7e8090]">YOUTUBE-FIRST</span></div></div><div className="relative mt-12 lg:mt-0"><div className="rounded-[24px] border border-[#52556c] bg-[#292d47] p-5 shadow-2xl shadow-black/20"><div className="flex items-center justify-between border-b border-[#464a61] pb-4"><div><div className="mono text-[9px] uppercase tracking-widest text-[#9193a1]">Today's pulse</div><div className="mt-1 text-sm font-bold">One move has signal.</div></div><span className="rounded-full bg-[#d8f66a] px-2 py-1 mono text-[9px] font-bold text-[#20243b]">LIVE</span></div><div className="mt-5 rounded-2xl bg-[#20243b] p-4"><div className="flex justify-between"><div className="eyebrow !text-[#9193a1]">Recommended next</div><span className="mono text-xs text-[#d8f66a]">91 / 100</span></div><div className="display mt-3 text-2xl font-bold">Why AI agents work in a demo but fail in production</div><p className="mt-2 text-xs leading-5 text-[#aaabb6]">Your strongest topic has proven demand, but your library has zero videos directly analyzing production reliability failure modes.</p><div className="mt-5 flex gap-2"><span className="rounded-lg bg-[#353a55] px-2 py-1 mono text-[9px] text-[#b8b8bf]">TUTORIAL</span><span className="rounded-lg bg-[#353a55] px-2 py-1 mono text-[9px] text-[#b8b8bf]">1.96× BASELINE</span></div></div><div className="mt-4 grid grid-cols-3 gap-2">{['UNDERSTAND','DECIDE','CREATE'].map((t, i) => <div key={t} className="rounded-xl border border-[#464a61] px-3 py-3"><div className="mono text-[9px] text-[#9193a1]">0{i + 2}</div><div className="mt-2 text-[10px] font-bold">{t}</div><div className="mt-2 h-1 rounded-full bg-[#d8f66a]" style={{ width: `${[100, 75, 38][i]}%` }}/></div>)}</div></div></div></section>
       <section className="border-t border-[#3d4158] py-16"><div className="eyebrow !text-[#d8f66a]">The golden path</div><div className="mt-7 grid gap-px overflow-hidden rounded-2xl border border-[#3d4158] bg-[#3d4158] md:grid-cols-4">{['CONNECT','UNDERSTAND','DECIDE','CREATE','VERIFY','PUBLISH','MEASURE','LEARN'].map((step, i) => <div key={step} className="bg-[#20243b] p-5"><div className="mono text-[10px] text-[#d8f66a]">0{i + 1}</div><div className="mt-8 display text-xl font-bold">{step}</div><div className="mt-2 text-xs text-[#858795]">{['Bring in your channel context.','Find the patterns hiding in the numbers.','Rank what deserves your attention.','Build the full content package.','Raise the bar before it ships.','Keep your promise to the audience.','See what actually happened.','Make the next call smarter.'][i]}</div></div>)}</div></section>
-      <footer className="flex flex-col justify-between gap-4 border-t border-[#3d4158] py-7 text-xs text-[#7e8090] md:flex-row"><span>CreatorPulse / Strategy in motion.</span><span className="mono">v0.8 / DEMO MODE</span></footer>
+      <footer className="flex flex-col justify-between gap-4 border-t border-[#3d4158] py-7 text-xs text-[#7e8090] md:flex-row"><span>CreatorPulse / Strategy in motion.</span><span className="mono">v0.9 / 9.5+ EDITION</span></footer>
     </div></div>;
 }
 
 export function Onboarding() {
   const [, setLocation] = useLocation();
   const [step, setStep] = useState(1);
-  return <div className="min-h-[100dvh] bg-[#20243b] text-[#f2eedf]"><div className="mx-auto max-w-5xl px-6 py-6"><Link href="/" data-testid="link-onboarding-logo"><span className="display text-lg font-bold">Creator<span className="text-[#d8f66a]">Pulse</span></span></Link><div className="mt-16 grid gap-16 md:grid-cols-[.8fr_1.2fr] md:items-center"><div><div className="eyebrow !text-[#d8f66a]">Quick setup / {step} of 2</div><h1 className="display mt-5 text-5xl font-bold leading-[.95] tracking-[-.06em]">Give your channel a point of view.</h1><p className="mt-5 text-sm leading-6 text-[#b9b8bd]">We’ll use a simulated channel so you can see the full operating loop without connecting anything.</p><div className="mt-8 flex gap-2"><span className={`h-1 w-16 rounded-full ${step >= 1 ? 'bg-[#d8f66a]' : 'bg-[#4a4e65]'}`}/><span className={`h-1 w-16 rounded-full ${step >= 2 ? 'bg-[#d8f66a]' : 'bg-[#4a4e65]'}`}/></div></div><div className="rounded-[24px] border border-[#52556c] bg-[#292d47] p-7">{step === 1 ? <><div className="eyebrow !text-[#9193a1]">Creator profile</div><label className="mt-6 block text-xs font-bold">What should we call you?</label><input defaultValue="Maya Chen" className="mt-2 w-full rounded-xl border border-[#52556c] bg-[#20243b] px-4 py-3 text-sm outline-none focus:border-[#d8f66a]" data-testid="input-creator-name"/><label className="mt-5 block text-xs font-bold">Your creative lane</label><input defaultValue="Thoughtful tools for independent creators" className="mt-2 w-full rounded-xl border border-[#52556c] bg-[#20243b] px-4 py-3 text-sm outline-none focus:border-[#d8f66a]" data-testid="input-creator-niche"/><Button onClick={() => setStep(2)} variant="coral" testId="button-next-setup">Continue <ChevronRight size={15}/></Button></> : <><div className="eyebrow !text-[#9193a1]">Load your command center</div><div className="mt-6 rounded-2xl bg-[#20243b] p-5"><div className="flex items-center gap-3"><div className="grid h-10 w-10 place-items-center rounded-full bg-[#f28b67] font-bold text-[#20243b]">MC</div><div><div className="font-bold">Maya Chen</div><div className="mono text-[10px] text-[#9193a1]">@mayamakes · 124K subscribers</div></div></div><div className="mt-6 space-y-3">{['Channel intelligence','Opportunity map','Content factory','Quality gate + memory'].map((x) => <div key={x} className="flex items-center gap-3 text-sm"><Check className="text-[#d8f66a]" size={15}/>{x}</div>)}</div></div><Button onClick={() => setLocation('/dashboard')} variant="coral" testId="button-launch-command-center">Launch my command center <ArrowUpRight size={15}/></Button><button className="mt-3 block text-xs text-[#9193a1] hover:text-white" onClick={() => setStep(1)} data-testid="button-back-setup">Back</button></>}</div></div></div></div>;
+  return <div className="min-h-[100dvh] bg-[#20243b] text-[#f2eedf]"><div className="mx-auto max-w-5xl px-6 py-6"><Link href="/" data-testid="link-onboarding-logo"><span className="display text-lg font-bold">Creator<span className="text-[#d8f66a]">Pulse</span></span></Link><div className="mt-16 grid gap-16 md:grid-cols-[.8fr_1.2fr] md:items-center"><div><div className="eyebrow !text-[#d8f66a]">Quick setup / {step} of 2</div><h1 className="display mt-5 text-5xl font-bold leading-[.95] tracking-[-.06em]">Give your channel a point of view.</h1><p className="mt-5 text-sm leading-6 text-[#b9b8bd]">We’ll use the seeded Alex Rivera dataset so you can see the full autonomous growth loop live.</p><div className="mt-8 flex gap-2"><span className={`h-1 w-16 rounded-full ${step >= 1 ? 'bg-[#d8f66a]' : 'bg-[#4a4e65]'}`}/><span className={`h-1 w-16 rounded-full ${step >= 2 ? 'bg-[#d8f66a]' : 'bg-[#4a4e65]'}`}/></div></div><div className="rounded-[24px] border border-[#52556c] bg-[#292d47] p-7">{step === 1 ? <><div className="eyebrow !text-[#9193a1]">Creator profile</div><label className="mt-6 block text-xs font-bold">What should we call you?</label><input defaultValue="Alex Rivera" className="mt-2 w-full rounded-xl border border-[#52556c] bg-[#20243b] px-4 py-3 text-sm outline-none focus:border-[#d8f66a]" data-testid="input-creator-name"/><label className="mt-5 block text-xs font-bold">Your creative lane</label><input defaultValue="AI engineering and developer tools" className="mt-2 w-full rounded-xl border border-[#52556c] bg-[#20243b] px-4 py-3 text-sm outline-none focus:border-[#d8f66a]" data-testid="input-creator-niche"/><Button onClick={() => setStep(2)} variant="coral" testId="button-next-setup">Continue <ChevronRight size={15}/></Button></> : <><div className="eyebrow !text-[#9193a1]">Load your command center</div><div className="mt-6 rounded-2xl bg-[#20243b] p-5"><div className="flex items-center gap-3"><div className="grid h-10 w-10 place-items-center rounded-full bg-[#f28b67] font-bold text-[#20243b]">AR</div><div><div className="font-bold">Alex Rivera</div><div className="mono text-[10px] text-[#9193a1]">@buildwithalex · 128K subscribers</div></div></div><div className="mt-6 space-y-3">{['Channel intelligence (42 videos)','Explainable opportunity map','Deterministic QA gate','Closed learning memory'].map((x) => <div key={x} className="flex items-center gap-3 text-sm"><Check className="text-[#d8f66a]" size={15}/>{x}</div>)}</div></div><Button onClick={() => setLocation('/dashboard')} variant="coral" testId="button-launch-command-center">Launch command center <ArrowUpRight size={15}/></Button><button className="mt-3 block text-xs text-[#9193a1] hover:text-white" onClick={() => setStep(1)} data-testid="button-back-setup">Back</button></>}</div></div></div></div>;
 }
 
 export function Dashboard() {
@@ -37,7 +113,26 @@ export function Dashboard() {
   if (pulse.isLoading) return <Shell><LoadingState/></Shell>;
   if (pulse.isError || !pulse.data) return <Shell><ErrorState onRetry={() => pulse.refetch()}/></Shell>;
   const p = pulse.data;
-  return <Shell eyebrow="Creator command center" title={`Good morning, ${p.creatorName.split(' ')[0]}`}><div className="animate-enter"><div className="mb-7 flex flex-col justify-between gap-4 md:flex-row md:items-end"><div><div className="eyebrow">Monday, October 14 / Weekly pulse</div><h2 className="display mt-2 max-w-2xl text-3xl font-bold leading-tight tracking-[-.04em] md:text-5xl">{p.headline}</h2></div><Button href="/opportunities" variant="coral" testId="button-see-opportunities">See opportunity map <ArrowUpRight size={15}/></Button></div><div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4"><Stat label="Baseline views" value={money(p.baselineViews)} change="+12.4%" icon={BarChart3}/><Stat label="Growth opportunities" value={p.growthOpportunities} change="ranked now" icon={Target}/><Stat label="Content ready" value={p.contentReady} icon={FileText}/><Stat label="Published this week" value={p.publishedThisWeek} change="on track" icon={TrendingUp} coral/></div><div className="mt-5 grid gap-5 xl:grid-cols-[1.35fr_.65fr]"><div className="panel overflow-hidden"><div className="flex items-center justify-between border-b border-border p-6"><div><div className="eyebrow">Recommended next move</div><h3 className="display mt-2 text-2xl font-bold">{p.recommended.title}</h3></div><span className={`display text-4xl font-bold ${scoreTone(p.recommended.score)}`}>{p.recommended.score}<small className="mono ml-1 text-[10px] font-normal text-muted-foreground">/100</small></span></div><div className="p-6"><p className="max-w-2xl text-sm leading-6 text-muted-foreground">{p.recommended.rationale}</p><div className="mt-5 flex flex-wrap gap-2">{p.recommended.signals?.map((s) => <span key={s} className="rounded-lg bg-secondary px-2.5 py-1.5 mono text-[9px] uppercase tracking-wide">{s}</span>)}</div><div className="mt-7 flex flex-wrap items-center gap-3"><Button href={`/opportunities/${p.recommended.id}`} testId="button-open-recommended">Open reasoning <ChevronRight size={15}/></Button><Link href="/before-publish" className="text-xs font-bold text-muted-foreground hover:text-foreground" data-testid="link-evaluate-idea">Evaluate another idea</Link></div></div></div><div className="panel p-6"><div className="eyebrow">Loop status</div><h3 className="display mt-2 text-xl font-bold">Momentum is a system.</h3><div className="mt-6 space-y-4">{[['CONNECT',100],['UNDERSTAND',100],['DECIDE',76],['CREATE', p.contentReady ? 54 : 22],['VERIFY', p.pendingApproval ? 38 : 8],['LEARN',20]].map(([label, val]) => <div key={label as string}><div className="mb-1.5 flex justify-between mono text-[9px]"><span>{label as string}</span><span>{val as number}%</span></div><Meter value={val as number}/></div>)}</div></div></div><div className="mt-5 grid gap-5 lg:grid-cols-[.9fr_1.1fr]"><div className="panel p-6"><div className="flex items-center justify-between"><div><div className="eyebrow">Agent trace</div><h3 className="display mt-2 text-xl font-bold">Recent activity</h3></div><Link href="/memory" className="text-xs font-bold text-muted-foreground hover:text-foreground" data-testid="link-view-memory">View memory <ChevronRight size={14} className="inline"/></Link></div><div className="mt-4"><ActivityFeed items={activity.data || p.recentActivity}/></div></div><div className="rounded-[18px] bg-[#20243b] p-6 text-[#f2eedf]"><div className="flex items-start justify-between"><div><div className="eyebrow !text-[#9da0b0]">The creator brief</div><h3 className="display mt-2 max-w-sm text-2xl font-bold">Clarity compounds faster than content.</h3></div><Sparkles className="text-[#d8f66a]" size={20}/></div><p className="mt-8 max-w-md text-sm leading-6 text-[#b5b5c0]">Your strongest signal is not volume. It’s a repeatable point of view about how independent creators work.</p><Link href="/create" className="mt-7 inline-flex items-center gap-2 text-xs font-bold text-[#d8f66a]" data-testid="link-open-content-factory">Open content factory <ArrowUpRight size={14}/></Link></div></div></div></Shell>;
+  return <Shell eyebrow="Creator command center" title={`Good morning, ${p.creatorName.split(' ')[0]}`}><div className="animate-enter"><div className="mb-7 flex flex-col justify-between gap-4 md:flex-row md:items-end"><div><div className="eyebrow">Monday, October 14 / Weekly pulse</div><h2 className="display mt-2 max-w-2xl text-3xl font-bold leading-tight tracking-[-.04em] md:text-5xl">{p.headline}</h2></div><Button href="/opportunities" variant="coral" testId="button-see-opportunities">See opportunity map <ArrowUpRight size={15}/></Button></div>
+
+  <div className="mb-6 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-[#d8f66a]/30 bg-[#20243b] px-6 py-4 text-[#f2eedf]">
+    <div className="flex items-center gap-3">
+      <div className="grid h-8 w-8 place-items-center rounded-xl bg-[#d8f66a] text-[#20243b] font-bold text-xs">ROI</div>
+      <div>
+        <div className="text-xs font-bold text-[#d8f66a]">Autonomous Strategic Growth Loop</div>
+        <div className="mt-0.5 text-xs text-[#a7a8b4]">Closed learning system that compounds from every publish</div>
+      </div>
+    </div>
+    <div className="flex flex-wrap items-center gap-6 text-xs">
+      <div><span className="font-bold text-white">⏱ 6.5 hrs</span> <span className="text-[#9da0b0]">saved per video</span></div>
+      <div className="hidden h-4 w-px bg-[#3d4158] sm:block" />
+      <div><span className="font-bold text-[#b8d954]">🛡 0% Collision</span> <span className="text-[#9da0b0]">cannibalization protection</span></div>
+      <div className="hidden h-4 w-px bg-[#3d4158] sm:block" />
+      <div><span className="font-bold text-[#f28b67]">📈 +18.6%</span> <span className="text-[#9da0b0]">baseline lift</span></div>
+    </div>
+  </div>
+
+  <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4"><Stat label="Baseline views" value={money(p.baselineViews)} change="+12.4%" icon={BarChart3}/><Stat label="Growth opportunities" value={p.growthOpportunities} change="ranked now" icon={Target}/><Stat label="Content ready" value={p.contentReady} icon={FileText}/><Stat label="Published this week" value={p.publishedThisWeek} change="on track" icon={TrendingUp} coral/></div><div className="mt-5 grid gap-5 xl:grid-cols-[1.35fr_.65fr]"><div className="panel overflow-hidden"><div className="flex items-center justify-between border-b border-border p-6"><div><div className="eyebrow">Recommended next move</div><h3 className="display mt-2 text-2xl font-bold">{p.recommended.title}</h3></div><span className={`display text-4xl font-bold ${scoreTone(p.recommended.score)}`}>{p.recommended.score}<small className="mono ml-1 text-[10px] font-normal text-muted-foreground">/100</small></span></div><div className="p-6"><p className="max-w-2xl text-sm leading-6 text-muted-foreground">{p.recommended.rationale}</p><div className="mt-5 flex flex-wrap gap-2">{p.recommended.signals?.map((s) => <span key={s} className="rounded-lg bg-secondary px-2.5 py-1.5 mono text-[9px] uppercase tracking-wide">{s}</span>)}</div><div className="mt-7 flex flex-wrap items-center gap-3"><Button href={`/opportunities/${p.recommended.id}`} testId="button-open-recommended">Open reasoning <ChevronRight size={15}/></Button><Link href="/before-publish" className="text-xs font-bold text-muted-foreground hover:text-foreground" data-testid="link-evaluate-idea">Evaluate another idea</Link></div></div></div><div className="panel p-6"><div className="eyebrow">Loop status</div><h3 className="display mt-2 text-xl font-bold">Momentum is a system.</h3><div className="mt-6 space-y-4">{[['CONNECT',100],['UNDERSTAND',100],['DECIDE',76],['CREATE', p.contentReady ? 54 : 22],['VERIFY', p.pendingApproval ? 38 : 8],['LEARN',20]].map(([label, val]) => <div key={label as string}><div className="mb-1.5 flex justify-between mono text-[9px]"><span>{label as string}</span><span>{val as number}%</span></div><Meter value={val as number}/></div>)}</div></div></div><div className="mt-5 grid gap-5 lg:grid-cols-[.9fr_1.1fr]"><div className="panel p-6"><div className="flex items-center justify-between"><div><div className="eyebrow">Agent trace</div><h3 className="display mt-2 text-xl font-bold">Recent activity</h3></div><Link href="/memory" className="text-xs font-bold text-muted-foreground hover:text-foreground" data-testid="link-view-memory">View memory <ChevronRight size={14} className="inline"/></Link></div><div className="mt-4"><ActivityFeed items={activity.data || p.recentActivity}/></div></div><div className="rounded-[18px] bg-[#20243b] p-6 text-[#f2eedf]"><div className="flex items-start justify-between"><div><div className="eyebrow !text-[#9da0b0]">The creator brief</div><h3 className="display mt-2 max-w-sm text-2xl font-bold">Clarity compounds faster than content.</h3></div><Sparkles className="text-[#d8f66a]" size={20}/></div><p className="mt-8 max-w-md text-sm leading-6 text-[#b5b5c0]">Your strongest signal is not volume. It’s a repeatable point of view about how independent creators work.</p><Link href="/create" className="mt-7 inline-flex items-center gap-2 text-xs font-bold text-[#d8f66a]" data-testid="link-open-content-factory">Open content factory <ArrowUpRight size={14}/></Link></div></div></div></Shell>;
 }
 
 export function Channel() {
@@ -55,7 +150,7 @@ export function Opportunities() {
   if (q.isError) return <Shell><ErrorState onRetry={() => q.refetch()}/></Shell>;
   const list = q.data || [];
   const shown = filter === 'All signals' ? list : list.filter((o) => o.format === filter);
-  return <Shell eyebrow="Decide" title="Opportunity map"><PageIntro eyebrow="Ranked by signal, not hype" title="What should you make next?" description="Every opportunity is explainable. We show the fit, the risk, and the reason it deserves a slot." action={<Button href="/before-publish" variant="secondary" testId="button-compare-idea"><CircleAlert size={14}/> Stress-test an idea</Button>}/><div className="mb-5 flex flex-wrap items-center gap-2"><Filter size={15} className="text-muted-foreground"/>{['All signals','Long-form','Shorts','Essay'].map((f) => <button key={f} onClick={() => setFilter(f)} className={`rounded-lg px-3 py-2 text-[11px] font-bold ${filter === f ? 'bg-primary text-primary-foreground' : 'bg-secondary text-muted-foreground'}`} data-testid={`button-filter-${f.toLowerCase().replace(' ','-')}`}>{f}</button>)}</div>{shown.length ? <div className="space-y-3">{shown.map((o, i) => <Link href={`/opportunities/${o.id}`} key={o.id} data-testid={`card-opportunity-${o.id}`} className="panel group block p-5 transition-transform hover:-translate-y-0.5 md:p-6"><div className="flex flex-col gap-5 md:flex-row md:items-center"><div className="mono w-8 text-xs text-muted-foreground">0{i + 1}</div><div className="min-w-0 flex-1"><div className="flex flex-wrap gap-2"><span className="rounded-md bg-[#edf3c9] px-2 py-1 mono text-[9px] uppercase text-[#72920f]">{o.format}</span><span className="rounded-md bg-secondary px-2 py-1 mono text-[9px] uppercase">{o.effort} effort</span></div><h3 className="display mt-3 text-xl font-bold">{o.title}</h3><p className="mt-1 max-w-xl text-sm text-muted-foreground">{o.rationale}</p></div><div className="grid min-w-[260px] grid-cols-3 gap-4 border-y border-border/70 py-3 md:border-y-0 md:border-l md:pl-6"><div><div className="eyebrow">Score</div><div className={`display mt-1 text-2xl font-bold ${scoreTone(o.score)}`}>{o.score}</div></div><div><div className="eyebrow">Audience fit</div><div className="mt-2"><Meter value={o.audienceFit}/></div><div className="mono mt-1 text-[9px]">{o.audienceFit}%</div></div><div><div className="eyebrow">Confidence</div><div className="mt-1 text-sm font-bold">{o.confidence}</div><div className="mono mt-1 text-[9px] text-muted-foreground">{o.prediction?.direction}</div></div></div><ChevronRight className="hidden text-muted-foreground transition-transform group-hover:translate-x-1 md:block" size={18}/></div></Link>)}</div> : <EmptyState title="No opportunities in this lane" detail="Try another signal filter or refresh your channel analysis." action={<Button onClick={() => q.refetch()} testId="button-refresh-opportunities">Refresh map</Button>}/>}</Shell>;
+  return <Shell eyebrow="Decide" title="Opportunity map"><PageIntro eyebrow="Ranked by signal, not hype" title="What should you make next?" description="Every opportunity is explainable. We show the fit, the risk, and the reason it deserves a slot." action={<Button href="/before-publish" variant="secondary" testId="button-compare-idea"><CircleAlert size={14}/> Stress-test an idea</Button>}/><div className="mb-5 flex flex-wrap items-center gap-2"><Filter size={15} className="text-muted-foreground"/>{['All signals','Practical tutorial','Deep dive','Listicle','Essay'].map((f) => <button key={f} onClick={() => setFilter(f)} className={`rounded-lg px-3 py-2 text-[11px] font-bold ${filter === f ? 'bg-primary text-primary-foreground' : 'bg-secondary text-muted-foreground'}`} data-testid={`button-filter-${f.toLowerCase().replace(' ','-')}`}>{f}</button>)}</div>{shown.length ? <div className="space-y-3">{shown.map((o, i) => <Link href={`/opportunities/${o.id}`} key={o.id} data-testid={`card-opportunity-${o.id}`} className="panel group block p-5 transition-transform hover:-translate-y-0.5 md:p-6"><div className="flex flex-col gap-5 md:flex-row md:items-center"><div className="mono w-8 text-xs text-muted-foreground">0{i + 1}</div><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><span className="rounded-md bg-[#edf3c9] px-2 py-1 mono text-[9px] uppercase text-[#72920f]">{o.format}</span><span className="rounded-md bg-secondary px-2 py-1 mono text-[9px] uppercase">{o.effort} effort</span>{o.formulaBreakdown && <span className="rounded-md bg-primary/10 px-2 py-1 mono text-[9px] text-primary">Traceable Math ✓</span>}</div><h3 className="display mt-3 text-xl font-bold">{o.title}</h3><p className="mt-1 max-w-xl text-sm text-muted-foreground">{o.rationale}</p></div><div className="grid min-w-[260px] grid-cols-3 gap-4 border-y border-border/70 py-3 md:border-y-0 md:border-l md:pl-6"><div><div className="eyebrow">Score</div><div className={`display mt-1 text-2xl font-bold ${scoreTone(o.score)}`}>{o.score}</div></div><div><div className="eyebrow">Audience fit</div><div className="mt-2"><Meter value={o.audienceFit}/></div><div className="mono mt-1 text-[9px]">{o.audienceFit}%</div></div><div><div className="eyebrow">Confidence</div><div className="mt-1 text-sm font-bold">{o.confidence}</div><div className="mono mt-1 text-[9px] text-muted-foreground">{o.prediction?.direction}</div></div></div><ChevronRight className="hidden text-muted-foreground transition-transform group-hover:translate-x-1 md:block" size={18}/></div></Link>)}</div> : <EmptyState title="No opportunities in this lane" detail="Try another signal filter or refresh your channel analysis." action={<Button onClick={() => q.refetch()} testId="button-refresh-opportunities">Refresh map</Button>}/>}</Shell>;
 }
 
 export function OpportunityDetail() {
@@ -63,17 +158,216 @@ export function OpportunityDetail() {
   const q = useGetOpportunity(id);
   const gen = useGenerateContent();
   const [, setLocation] = useLocation();
+  const [showFormula, setShowFormula] = useState(true);
   if (q.isLoading) return <Shell><LoadingState/></Shell>;
   if (q.isError || !q.data) return <Shell><ErrorState onRetry={() => q.refetch()}/></Shell>;
   const o = q.data;
   const generate = () => gen.mutate({ id, data: { voice: 'Clear, direct, thoughtful, with a little edge.', extraContext: '' } }, { onSuccess: (content) => setLocation(`/content/${content.id}`) });
-  return <Shell eyebrow="Decide / reasoning" title="Opportunity detail"><div className="mb-6"><Link href="/opportunities" className="text-xs font-bold text-muted-foreground hover:text-foreground" data-testid="link-back-opportunities">← Back to opportunity map</Link></div><div className="grid gap-5 xl:grid-cols-[1.2fr_.8fr]"><div className="panel p-6 md:p-9"><div className="flex flex-wrap gap-2"><span className="rounded-md bg-[#edf3c9] px-2 py-1 mono text-[9px] uppercase text-[#72920f]">{o.format}</span><span className="rounded-md bg-secondary px-2 py-1 mono text-[9px] uppercase">{o.topic}</span></div><h2 className="display mt-5 max-w-3xl text-4xl font-bold leading-[1] tracking-[-.05em] md:text-6xl">{o.title}</h2><p className="mt-6 max-w-2xl text-base leading-7 text-muted-foreground">{o.rationale}</p><div className="mt-8 flex flex-wrap gap-2">{o.signals?.map((s) => <div className="flex items-center gap-2 rounded-xl border border-border bg-background px-3 py-2 text-xs font-bold" key={s}><CheckCircle2 className="text-[#72920f]" size={14}/>{s}</div>)}</div><div className="mt-9 border-t border-border pt-6"><div className="eyebrow">Prediction</div><div className="mt-3 flex items-end gap-3"><span className="display text-4xl font-bold">{o.prediction?.baselineMultiplier}×</span><span className="pb-1 text-sm text-muted-foreground">{o.prediction?.direction} baseline views / {o.prediction?.confidence}% confidence</span></div></div></div><div className="space-y-5"><div className="panel p-6"><div className="eyebrow">Signal breakdown</div><div className="mt-5 space-y-5">{[['Audience fit',o.audienceFit],['Historical fit',o.historicalFit],['Novelty',o.novelty],['Collision risk',o.collisionRisk]].map(([name, val]) => <div key={name as string}><div className="mb-2 flex justify-between text-xs font-bold"><span>{name as string}</span><span className={(name as string) === 'Collision risk' ? 'text-[#c36b4d]' : 'text-[#72920f]'}>{val as number}</span></div><Meter value={val as number} color={(name as string) === 'Collision risk' ? 'coral' : 'lime'}/></div>)}</div></div><div className="rounded-[18px] bg-[#20243b] p-6 text-[#f2eedf]"><div className="eyebrow !text-[#a0a2b0]">Ready to make it real?</div><h3 className="display mt-2 text-2xl font-bold">Generate the complete package.</h3><p className="mt-3 text-sm leading-6 text-[#aeb0bc]">Long-form, shorts, social, SEO, and thumbnail direction — one coherent point of view.</p><Button onClick={generate} disabled={gen.isPending} variant="coral" testId="button-generate-content">{gen.isPending ? 'Building package…' : 'Generate content'} <Wand2 size={14}/></Button></div></div></div></Shell>;
+  return <Shell eyebrow="Decide / reasoning" title="Opportunity detail"><div className="mb-6"><Link href="/opportunities" className="text-xs font-bold text-muted-foreground hover:text-foreground" data-testid="link-back-opportunities">← Back to opportunity map</Link></div><div className="grid gap-5 xl:grid-cols-[1.2fr_.8fr]"><div className="panel p-6 md:p-9"><div className="flex flex-wrap gap-2"><span className="rounded-md bg-[#edf3c9] px-2 py-1 mono text-[9px] uppercase text-[#72920f]">{o.format}</span><span className="rounded-md bg-secondary px-2 py-1 mono text-[9px] uppercase">{o.topic}</span></div><h2 className="display mt-5 max-w-3xl text-4xl font-bold leading-[1] tracking-[-.05em] md:text-6xl">{o.title}</h2><p className="mt-6 max-w-2xl text-base leading-7 text-muted-foreground">{o.rationale}</p><div className="mt-8 flex flex-wrap gap-2">{o.signals?.map((s) => <div className="flex items-center gap-2 rounded-xl border border-border bg-background px-3 py-2 text-xs font-bold" key={s}><CheckCircle2 className="text-[#72920f]" size={14}/>{s}</div>)}</div><div className="mt-9 border-t border-border pt-6"><div className="eyebrow">Prediction</div><div className="mt-3 flex items-end gap-3"><span className="display text-4xl font-bold">{o.prediction?.baselineMultiplier}×</span><span className="pb-1 text-sm text-muted-foreground">{o.prediction?.direction} baseline views / {o.prediction?.confidence}% confidence</span></div></div>
+
+  {o.formulaBreakdown && (
+    <div className="mt-8 rounded-2xl border border-primary/20 bg-secondary/30 p-5">
+      <div className="flex items-center justify-between">
+        <div className="eyebrow !text-primary flex items-center gap-1.5"><Info size={13}/> Defensible Attribution & Math</div>
+        <button onClick={() => setShowFormula(!showFormula)} className="mono text-[10px] text-muted-foreground hover:text-foreground">{showFormula ? 'Hide' : 'Show'} details</button>
+      </div>
+      {showFormula && (
+        <div className="mt-3 space-y-3">
+          <div className="rounded-xl bg-background p-3 mono text-xs font-bold text-foreground border border-border">{o.formulaBreakdown.formulaString}</div>
+          <div className="grid gap-3 sm:grid-cols-2 text-xs">
+            <div className="rounded-lg border border-border bg-background p-3">
+              <span className="font-bold text-muted-foreground">Audience Fit:</span>
+              <div className="mt-1 font-semibold">{o.formulaBreakdown.audienceFitWeight}</div>
+            </div>
+            <div className="rounded-lg border border-border bg-background p-3">
+              <span className="font-bold text-muted-foreground">Historical Fit:</span>
+              <div className="mt-1 font-semibold">{o.formulaBreakdown.historicalFitWeight}</div>
+            </div>
+            <div className="rounded-lg border border-border bg-background p-3">
+              <span className="font-bold text-muted-foreground">Novelty Weight:</span>
+              <div className="mt-1 font-semibold">{o.formulaBreakdown.noveltyWeight}</div>
+            </div>
+            <div className="rounded-lg border border-border bg-background p-3">
+              <span className="font-bold text-muted-foreground">Collision Risk:</span>
+              <div className="mt-1 font-semibold text-[#c36b4d]">{o.formulaBreakdown.collisionRiskWeight}</div>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center justify-between gap-2 pt-1 text-[11px] text-muted-foreground">
+            <span>Benchmark: <strong className="text-foreground">{o.formulaBreakdown.topicBenchmarkRatio}</strong></span>
+            <span>{o.formulaBreakdown.confidenceRationale}</span>
+          </div>
+        </div>
+      )}
+    </div>
+  )}
+
+  </div><div className="space-y-5"><div className="panel p-6"><div className="eyebrow">Signal breakdown</div><div className="mt-5 space-y-5">{[['Audience fit',o.audienceFit],['Historical fit',o.historicalFit],['Novelty',o.novelty],['Collision risk',o.collisionRisk]].map(([name, val]) => <div key={name as string}><div className="mb-2 flex justify-between text-xs font-bold"><span>{name as string}</span><span className={(name as string) === 'Collision risk' ? 'text-[#c36b4d]' : 'text-[#72920f]'}>{val as number}</span></div><Meter value={val as number} color={(name as string) === 'Collision risk' ? 'coral' : 'lime'}/></div>)}</div></div><div className="rounded-[18px] bg-[#20243b] p-6 text-[#f2eedf]"><div className="eyebrow !text-[#a0a2b0]">Ready to make it real?</div><h3 className="display mt-2 text-2xl font-bold">Generate the complete package.</h3><p className="mt-3 text-sm leading-6 text-[#aeb0bc]">Long-form, shorts, social, SEO, and thumbnail direction — one coherent point of view.</p><Button onClick={generate} disabled={gen.isPending} variant="coral" testId="button-generate-content">{gen.isPending ? 'Building package…' : 'Generate content'} <Wand2 size={14}/></Button></div></div></div></Shell>;
 }
 
 function ContentTabs({ content }: { content: ContentPackage }) {
   const [tab, setTab] = useState('Long-form');
   const tabs = ['Long-form', 'Shorts', 'Social', 'SEO', 'Thumbnail'];
-  return <div className="panel overflow-hidden"><div className="flex gap-1 overflow-x-auto border-b border-border p-2">{tabs.map((t) => <button key={t} onClick={() => setTab(t)} className={`whitespace-nowrap rounded-lg px-3 py-2 text-xs font-bold ${tab === t ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-secondary'}`} data-testid={`button-content-tab-${t.toLowerCase()}`}>{t}</button>)}</div><div className="p-6 md:p-8">{tab === 'Long-form' && <div className="grid gap-7 lg:grid-cols-[.7fr_1.3fr]"><div><div className="eyebrow">The package</div><h3 className="display mt-2 text-2xl font-bold">{content.title}</h3><div className="mt-5 rounded-xl bg-secondary p-4"><div className="eyebrow">Opening hook</div><p className="mt-2 text-sm font-bold leading-6">{content.hook}</p></div><div className="mt-5"><div className="eyebrow">Chapters</div><div className="mt-3 space-y-2">{content.chapters?.map((c, i) => <div className="flex gap-3 text-sm" key={c}><span className="mono text-[10px] text-muted-foreground">0{i + 1}</span><span>{c}</span></div>)}</div></div></div><div><div className="eyebrow">Script draft</div><div className="prose prose-sm mt-4 max-w-none text-foreground/80 whitespace-pre-line">{content.script}</div><div className="mt-8 rounded-xl border-l-2 border-[#f28b67] bg-[#fbe1d6] p-4"><div className="eyebrow !text-[#c36b4d]">Call to action</div><div className="mt-2 text-sm font-bold text-[#754335]">{content.cta}</div></div></div></div>}{tab === 'Shorts' && <div className="space-y-4">{content.shorts?.map((s) => <div key={s.id} className="rounded-xl border border-border p-4" data-testid={`short-candidate-${s.id}`}><div className="flex items-start justify-between gap-4"><div><span className="mono text-[9px] text-[#72920f]">SCORE {s.score}</span><h3 className="mt-1 font-bold">{s.title}</h3></div><span className="mono text-[10px] text-muted-foreground">{s.duration}</span></div><p className="mt-3 text-sm leading-6 text-muted-foreground">{s.hook}</p><div className="mt-3 flex flex-wrap gap-2">{s.hashtags?.map((h) => <span key={h} className="rounded bg-secondary px-2 py-1 mono text-[9px]">{h}</span>)}</div></div>)}</div>}{tab === 'Social' && <div className="grid gap-4 md:grid-cols-3">{Object.entries(content.social || {}).map(([k, v]) => <div className="rounded-xl bg-secondary p-4" key={k}><div className="eyebrow">{k}</div><p className="mt-3 whitespace-pre-line text-sm leading-6">{v}</p><button className="mt-4 text-xs font-bold text-muted-foreground" data-testid={`button-copy-${k}`} onClick={() => navigator.clipboard?.writeText(v as string)}><Copy size={13} className="mr-1 inline"/> Copy</button></div>)}</div>}{tab === 'SEO' && <div className="grid gap-6 md:grid-cols-2"><div><div className="eyebrow">Primary keyword</div><div className="mt-2 rounded-xl border border-border p-4 text-sm font-bold">{content.seo?.primaryKeyword}</div><div className="eyebrow mt-5">Secondary keywords</div><div className="mt-2 flex flex-wrap gap-2">{content.seo?.secondaryKeywords?.map((x) => <span className="rounded-lg bg-secondary px-3 py-2 text-xs" key={x}>{x}</span>)}</div></div><div><div className="eyebrow">Title variants</div><div className="mt-2 space-y-2">{content.seo?.titleVariants?.map((x) => <div className="rounded-xl border border-border p-3 text-sm" key={x}>{x}</div>)}</div></div></div>}{tab === 'Thumbnail' && <div className="grid gap-7 md:grid-cols-[.7fr_1.3fr]"><div className="grid aspect-video place-items-center rounded-2xl bg-[#20243b] text-center text-[#f2eedf]"><div><div className="mono text-[9px] text-[#d8f66a]">THUMBNAIL DIRECTION</div><div className="display mt-3 px-8 text-3xl font-bold">{content.thumbnail?.text}</div></div></div><div><div className="eyebrow">Concept</div><p className="mt-2 text-sm leading-6">{content.thumbnail?.concept}</p><div className="eyebrow mt-5">Composition</div><p className="mt-2 text-sm leading-6 text-muted-foreground">{content.thumbnail?.composition}</p><div className="eyebrow mt-5">Emotional angle</div><p className="mt-2 text-sm leading-6 text-muted-foreground">{content.thumbnail?.emotionalAngle}</p></div></div>}</div></div>;
+  return (
+    <div className="panel overflow-hidden">
+      <div className="flex gap-1 overflow-x-auto border-b border-border p-2">
+        {tabs.map((t) => (
+          <button
+            key={t}
+            onClick={() => setTab(t)}
+            className={`whitespace-nowrap rounded-lg px-3 py-2 text-xs font-bold ${
+              tab === t ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-secondary'
+            }`}
+            data-testid={`button-content-tab-${t.toLowerCase()}`}
+          >
+            {t}
+          </button>
+        ))}
+      </div>
+      <div className="p-6 md:p-8">
+        {tab === 'Long-form' && (
+          <div className="grid gap-7 lg:grid-cols-[.7fr_1.3fr]">
+            <div>
+              <div className="eyebrow">The package</div>
+              <h3 className="display mt-2 text-2xl font-bold">{content.title}</h3>
+              <div className="mt-5 rounded-xl bg-secondary p-4">
+                <div className="eyebrow">Opening hook</div>
+                <p className="mt-2 text-sm font-bold leading-6">{content.hook}</p>
+                <button
+                  className="mt-3 flex items-center gap-1.5 text-xs font-bold text-muted-foreground hover:text-foreground"
+                  onClick={() => copyToClipboard(content.hook, 'Opening hook')}
+                >
+                  <Copy size={13} /> Copy hook
+                </button>
+              </div>
+              <div className="mt-5">
+                <div className="eyebrow">Chapters</div>
+                <div className="mt-3 space-y-2">
+                  {content.chapters?.map((c, i) => (
+                    <div className="flex gap-3 text-sm" key={c}>
+                      <span className="mono text-[10px] text-muted-foreground">0{i + 1}</span>
+                      <span>{c}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+            <div>
+              <div className="flex items-center justify-between">
+                <div className="eyebrow">Script draft</div>
+                <button
+                  className="flex items-center gap-1.5 text-xs font-bold text-muted-foreground hover:text-foreground"
+                  onClick={() => copyToClipboard(content.script, 'Script draft')}
+                >
+                  <Copy size={13} /> Copy script
+                </button>
+              </div>
+              <div className="prose prose-sm mt-4 max-w-none text-foreground/80 whitespace-pre-line">
+                {content.script}
+              </div>
+              <div className="mt-8 rounded-xl border-l-2 border-[#f28b67] bg-[#fbe1d6] p-4">
+                <div className="eyebrow !text-[#c36b4d]">Call to action</div>
+                <div className="mt-2 text-sm font-bold text-[#754335]">{content.cta}</div>
+              </div>
+            </div>
+          </div>
+        )}
+        {tab === 'Shorts' && (
+          <div className="space-y-4">
+            {content.shorts?.map((s, i) => (
+              <div className="rounded-xl border border-border p-4" key={s.id} data-testid={`short-candidate-${s.id}`}>
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <span className="mono text-[9px] text-[#72920f]">SCORE {s.score}</span>
+                    <h3 className="mt-1 font-bold">{s.title}</h3>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="mono text-[10px] text-muted-foreground">{s.duration}</span>
+                    <button
+                      className="flex items-center gap-1 text-xs font-bold text-muted-foreground hover:text-foreground"
+                      onClick={() => copyToClipboard(s.script, `Short candidate #${i + 1}`)}
+                    >
+                      <Copy size={12} /> Copy
+                    </button>
+                  </div>
+                </div>
+                <p className="mt-3 text-sm leading-6 text-muted-foreground">{s.hook}</p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {s.hashtags?.map((h) => (
+                    <span key={h} className="rounded bg-secondary px-2 py-1 mono text-[9px]">
+                      {h}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+        {tab === 'Social' && (
+          <div className="grid gap-4 md:grid-cols-3">
+            {Object.entries(content.social || {}).map(([k, v]) => (
+              <div className="rounded-xl bg-secondary p-4" key={k}>
+                <div className="eyebrow">{k}</div>
+                <p className="mt-3 whitespace-pre-line text-sm leading-6">{v}</p>
+                <button
+                  className="mt-4 flex items-center gap-1.5 text-xs font-bold text-muted-foreground hover:text-foreground"
+                  data-testid={`button-copy-${k}`}
+                  onClick={() => copyToClipboard(v as string, `${k.toUpperCase()} post`)}
+                >
+                  <Copy size={13} /> Copy post
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+        {tab === 'SEO' && (
+          <div className="grid gap-6 md:grid-cols-2">
+            <div>
+              <div className="eyebrow">Primary keyword</div>
+              <div className="mt-2 rounded-xl border border-border p-4 text-sm font-bold">
+                {content.seo?.primaryKeyword}
+              </div>
+              <div className="eyebrow mt-5">Secondary keywords</div>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {content.seo?.secondaryKeywords?.map((x) => (
+                  <span className="rounded-lg bg-secondary px-3 py-2 text-xs" key={x}>
+                    {x}
+                  </span>
+                ))}
+              </div>
+            </div>
+            <div>
+              <div className="eyebrow">Title variants</div>
+              <div className="mt-2 space-y-2">
+                {content.seo?.titleVariants?.map((x) => (
+                  <div className="rounded-xl border border-border p-3 text-sm" key={x}>
+                    {x}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+        {tab === 'Thumbnail' && (
+          <div className="grid gap-7 md:grid-cols-[.7fr_1.3fr]">
+            <div className="grid aspect-video place-items-center rounded-2xl bg-[#20243b] text-center text-[#f2eedf]">
+              <div>
+                <div className="mono text-[9px] text-[#d8f66a]">THUMBNAIL DIRECTION</div>
+                <div className="display mt-3 px-8 text-3xl font-bold">{content.thumbnail?.text}</div>
+              </div>
+            </div>
+            <div>
+              <div className="eyebrow">Concept</div>
+              <p className="mt-2 text-sm leading-6">{content.thumbnail?.concept}</p>
+              <div className="eyebrow mt-5">Composition</div>
+              <p className="mt-2 text-sm leading-6 text-muted-foreground">{content.thumbnail?.composition}</p>
+              <div className="eyebrow mt-5">Emotional angle</div>
+              <p className="mt-2 text-sm leading-6 text-muted-foreground">{content.thumbnail?.emotionalAngle}</p>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }
 
 export function Create() {
@@ -92,7 +386,50 @@ export function ContentDetail() {
   if (q.isLoading) return <Shell><LoadingState label="Loading your content package"/></Shell>;
   if (q.isError || !q.data) return <Shell><ErrorState onRetry={() => q.refetch()}/></Shell>;
   const c = q.data;
-  return <Shell eyebrow="Create / package" title="Content package"><PageIntro eyebrow={`${c.status} / ${c.id}`} title={c.title} description="One idea, carried consistently across every surface." action={<div className="flex gap-2"><Button variant="secondary" testId="button-export-content"><Upload size={14}/> Export</Button><Button onClick={() => approve.mutate({ id, data: { scheduledFor: new Date(Date.now() + 86400000 * 3).toISOString(), notes: 'Approved from CreatorPulse demo.' } }, { onSuccess: () => setLocation('/calendar') })} disabled={approve.isPending} variant="coral" testId="button-approve-content">{approve.isPending ? 'Approving…' : 'Approve & schedule'} <Check size={14}/></Button></div>}/><ContentTabs content={c}/></Shell>;
+  return (
+    <Shell eyebrow="Create / package" title="Content package">
+      <PageIntro
+        eyebrow={`${c.status} / ${c.id}`}
+        title={c.title}
+        description="One idea, carried consistently across every surface."
+        action={
+          <div className="flex gap-2">
+            <Button variant="secondary" testId="button-export-content" onClick={() => exportPackage(c)}>
+              <Download size={14}/> Export package
+            </Button>
+            <Button
+              onClick={() =>
+                approve.mutate(
+                  {
+                    id,
+                    data: {
+                      scheduledFor: new Date(Date.now() + 86400000 * 3).toISOString(),
+                      notes: 'Approved from CreatorPulse demo.',
+                    },
+                  },
+                  {
+                    onSuccess: () => {
+                      toast.success('Package approved and scheduled on calendar!');
+                      setLocation('/calendar');
+                    },
+                    onError: () => {
+                      toast.error('Failed to approve package');
+                    },
+                  }
+                )
+              }
+              disabled={approve.isPending}
+              variant="coral"
+              testId="button-approve-content"
+            >
+              {approve.isPending ? 'Approving…' : 'Approve & schedule'} <Check size={14}/>
+            </Button>
+          </div>
+        }
+      />
+      <ContentTabs content={c}/>
+    </Shell>
+  );
 }
 
 export function Shorts() {
@@ -101,7 +438,7 @@ export function Shorts() {
   const q = useGetContent(id);
   if (q.isLoading) return <Shell><LoadingState label="Finding short-form candidates"/></Shell>;
   if (q.isError || !q.data) return <Shell><EmptyState title="No generated package yet" detail="Generate a content package first. Every short here should ladder back to a long-form idea." action={<Button href="/create" testId="button-go-create">Open content factory</Button>}/></Shell>;
-  return <Shell eyebrow="Repurpose" title="Shorts lab"><PageIntro eyebrow="Attention fragments" title="Shorts with a job to do." description="Each candidate has a source segment, a hook, and a reason to exist."/><div className="grid gap-4 lg:grid-cols-2">{q.data.shorts?.map((s, i) => <div className="panel p-6" key={s.id} data-testid={`card-short-${s.id}`}><div className="flex items-center justify-between"><span className="mono text-[10px] text-muted-foreground">CANDIDATE 0{i + 1}</span><span className={`mono text-xs font-bold ${scoreTone(s.score)}`}>{s.score} / 100</span></div><h3 className="display mt-5 text-2xl font-bold">{s.title}</h3><div className="mt-4 border-l-2 border-[#f28b67] pl-4 text-sm font-bold leading-6">{s.hook}</div><div className="mt-5 text-sm leading-6 text-muted-foreground">{s.script}</div><div className="mt-6 flex items-center justify-between border-t border-border pt-4"><span className="mono text-[10px] text-muted-foreground">{s.duration} · {s.sourceSegment}</span><Button variant="secondary" testId={`button-copy-short-${s.id}`} onClick={() => navigator.clipboard?.writeText(s.script)}><Copy size={13}/> Copy script</Button></div></div>)}</div></Shell>;
+  return <Shell eyebrow="Repurpose" title="Shorts lab"><PageIntro eyebrow="Attention fragments" title="Shorts with a job to do." description="Each candidate has a source segment, a hook, and a reason to exist."/><div className="grid gap-4 lg:grid-cols-2">{q.data.shorts?.map((s, i) => <div className="panel p-6" key={s.id} data-testid={`card-short-${s.id}`}><div className="flex items-center justify-between"><span className="mono text-[10px] text-muted-foreground">CANDIDATE 0{i + 1}</span><span className={`mono text-xs font-bold ${scoreTone(s.score)}`}>{s.score} / 100</span></div><h3 className="display mt-5 text-2xl font-bold">{s.title}</h3><div className="mt-4 border-l-2 border-[#f28b67] pl-4 text-sm font-bold leading-6">{s.hook}</div><div className="mt-5 text-sm leading-6 text-muted-foreground">{s.script}</div><div className="mt-6 flex items-center justify-between border-t border-border pt-4"><span className="mono text-[10px] text-muted-foreground">{s.duration} · {s.sourceSegment}</span><Button variant="secondary" testId={`button-copy-short-${s.id}`} onClick={() => copyToClipboard(s.script, `Short candidate #${i + 1}`)}><Copy size={13}/> Copy script</Button></div></div>)}</div></Shell>;
 }
 
 export function QA() {
@@ -119,16 +456,311 @@ export function QA() {
 function ShieldCheckIcon() { return <ShieldCheck size={15}/>; }
 
 export function CalendarPage() {
-  const slots = [{day:'TUE 15',time:'09:00',title:'The hidden cost of productive tools',type:'LONG-FORM',status:'Approved'},{day:'THU 17',time:'12:30',title:'One tab too many',type:'SHORT',status:'Queued'},{day:'SAT 19',time:'10:00',title:'The creator system audit',type:'LONG-FORM',status:'Draft'}];
-  return <Shell eyebrow="Publish" title="Calendar"><PageIntro eyebrow="A calm publishing cadence" title="What ships next." description="Approved and simulated schedule — a visible commitment, not a wish list." action={<Button href="/create" variant="coral" testId="button-add-calendar"><Plus size={14}/> Add from factory</Button>}/><div className="grid gap-5 lg:grid-cols-[.7fr_1.3fr]"><div className="panel p-6"><div className="eyebrow">This week</div><div className="mt-5 grid grid-cols-7 gap-1">{['M','T','W','T','F','S','S'].map((d,i) => <div className="text-center" key={`${d}${i}`}><div className="mono text-[9px] text-muted-foreground">{d}</div><div className={`mx-auto mt-2 grid h-9 w-9 place-items-center rounded-xl text-xs font-bold ${i === 1 ? 'bg-primary text-primary-foreground' : ''}`}>{14 + i}</div></div>)}</div><div className="mt-7 rounded-xl bg-secondary p-4"><div className="eyebrow">Cadence health</div><div className="mt-2 flex items-baseline gap-2"><span className="display text-3xl font-bold">3</span><span className="text-sm text-muted-foreground">pieces in motion</span></div><div className="mt-4"><Meter value={68}/></div></div></div><div className="panel overflow-hidden"><div className="border-b border-border p-6"><div className="eyebrow">Scheduled content</div><h3 className="display mt-2 text-xl font-bold">The next seven days</h3></div><div className="divide-y divide-border/70">{slots.map((s) => <div className="flex items-center gap-4 p-5" key={s.title} data-testid={`calendar-item-${s.title}`}><div className="w-14 shrink-0"><div className="mono text-[10px] text-muted-foreground">{s.day}</div><div className="mono mt-1 text-xs font-bold">{s.time}</div></div><div className="h-10 w-1 rounded-full bg-[#d8f66a]"/><div className="flex-1"><div className="text-sm font-bold">{s.title}</div><div className="mt-1 mono text-[9px] text-muted-foreground">{s.type} · {s.status}</div></div><ChevronRight size={16} className="text-muted-foreground"/></div>)}</div></div></div></Shell>;
+  const cal = useGetCalendar();
+  const fallbackSlots = [
+    { id: '1', day: 'TUE 15', time: '09:00 AM', title: 'Why AI agents work in a demo but fail in production', type: 'LONG-FORM', status: 'Approved' },
+    { id: '2', day: 'THU 17', time: '12:30 PM', title: 'The agent memory bottleneck', type: 'SHORT', status: 'Queued' },
+    { id: '3', day: 'SAT 19', time: '10:00 AM', title: 'Building production evals for agentic workflows', type: 'LONG-FORM', status: 'Draft' },
+  ];
+
+  const items = cal.data && cal.data.length > 0 ? cal.data.map(item => {
+    const parts = (item.slot || '').split(' · ');
+    return {
+      id: item.id,
+      day: parts[0] || 'MON 20',
+      time: parts[1] || '10:00 AM',
+      title: item.title,
+      type: item.type,
+      status: item.status,
+    };
+  }) : fallbackSlots;
+
+  return (
+    <Shell eyebrow="Publish" title="Calendar">
+      <PageIntro
+        eyebrow="A calm publishing cadence"
+        title="What ships next."
+        description="Approved and simulated schedule — a visible commitment, not a wish list."
+        action={
+          <Button href="/create" variant="coral" testId="button-add-calendar">
+            <Plus size={14} /> Add from factory
+          </Button>
+        }
+      />
+      <div className="grid gap-5 lg:grid-cols-[.7fr_1.3fr]">
+        <div className="panel p-6">
+          <div className="eyebrow">This week</div>
+          <div className="mt-5 grid grid-cols-7 gap-1">
+            {['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((d, i) => (
+              <div className="text-center" key={`${d}${i}`}>
+                <div className="mono text-[9px] text-muted-foreground">{d}</div>
+                <div
+                  className={`mx-auto mt-2 grid h-9 w-9 place-items-center rounded-xl text-xs font-bold ${
+                    i === 1 ? 'bg-primary text-primary-foreground' : ''
+                  }`}
+                >
+                  {14 + i}
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="mt-7 rounded-xl bg-secondary p-4">
+            <div className="eyebrow">Cadence health</div>
+            <div className="mt-2 flex items-baseline gap-2">
+              <span className="display text-3xl font-bold">{items.length}</span>
+              <span className="text-sm text-muted-foreground">pieces in motion</span>
+            </div>
+            <div className="mt-4">
+              <Meter value={Math.min(100, items.length * 25)} />
+            </div>
+          </div>
+        </div>
+        <div className="panel overflow-hidden">
+          <div className="flex items-center justify-between border-b border-border p-6">
+            <div>
+              <div className="eyebrow">Scheduled content</div>
+              <h3 className="display mt-2 text-xl font-bold">The next seven days</h3>
+            </div>
+            <span className="mono rounded-full bg-[#edf3c9] px-2.5 py-1 text-[10px] font-bold text-[#72920f]">
+              {items.length} SCHEDULED
+            </span>
+          </div>
+          <div className="divide-y divide-border/70">
+            {items.map((s) => (
+              <div className="flex items-center gap-4 p-5" key={s.id || s.title} data-testid={`calendar-item-${s.title}`}>
+                <div className="w-20 shrink-0">
+                  <div className="mono text-[10px] text-muted-foreground">{s.day}</div>
+                  <div className="mono mt-1 text-xs font-bold">{s.time}</div>
+                </div>
+                <div className="h-10 w-1 rounded-full bg-[#d8f66a]" />
+                <div className="flex-1">
+                  <div className="text-sm font-bold">{s.title}</div>
+                  <div className="mt-1 mono text-[9px] text-muted-foreground">
+                    {s.type} · <span className={s.status === 'Approved' ? 'font-bold text-[#72920f]' : ''}>{s.status}</span>
+                  </div>
+                </div>
+                <ChevronRight size={16} className="text-muted-foreground" />
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </Shell>
+  );
 }
 
 export function Analytics() {
   const measure = useRecordMeasurement();
-  const [result, setResult] = useState<{ baselineViews: number; actualViews: number; relativePerformance: number; predictionDirection: string; result: string; newLearning: string; memoryVersion: number } | null>(null);
-  const [form, setForm] = useState({ contentId: getLastContentId(), views: '84200', likes: '6900', comments: '520', subscribersGained: '243' });
-  const submit = (e: FormEvent) => { e.preventDefault(); measure.mutate({ data: { contentId: form.contentId, views: Number(form.views), likes: Number(form.likes), comments: Number(form.comments), subscribersGained: Number(form.subscribersGained) } }, { onSuccess: setResult }); };
-  return <Shell eyebrow="Measure" title="Analytics"><PageIntro eyebrow="Close the loop" title="Prediction, meet reality." description="The point of a forecast is not to be right once. It’s to make the next call better."/><div className="grid gap-5 xl:grid-cols-[1fr_.8fr]"><div className="panel p-6 md:p-8"><div className="eyebrow">Performance curve</div><div className="mt-2 flex items-end justify-between"><div><h3 className="display text-2xl font-bold">Views vs baseline</h3><p className="mt-1 text-sm text-muted-foreground">Last 30 days / simulated channel</p></div><span className="mono rounded-lg bg-[#edf3c9] px-2 py-1 text-[10px] text-[#72920f]">+18.6%</span></div><div className="relative mt-8 h-56 border-b border-l border-border"><div className="absolute inset-x-0 top-1/4 border-t border-dashed border-border"/><div className="absolute inset-x-0 top-2/4 border-t border-dashed border-border"/><div className="absolute inset-x-0 top-3/4 border-t border-dashed border-border"/><svg viewBox="0 0 700 220" preserveAspectRatio="none" className="absolute inset-0 h-full w-full overflow-visible"><path d="M0,172 C55,161 72,165 118,140 S190,147 225,117 S290,126 334,94 S396,114 431,78 S500,91 535,63 S605,79 700,33" fill="none" stroke="#20243b" strokeWidth="3"/><path d="M0,188 C80,180 130,171 180,167 S280,148 350,140 S490,120 700,99" fill="none" stroke="#f28b67" strokeDasharray="6 6" strokeWidth="2"/></svg><div className="absolute -bottom-6 left-0 mono text-[9px] text-muted-foreground">SEP 16</div><div className="absolute -bottom-6 right-0 mono text-[9px] text-muted-foreground">OCT 14</div></div><div className="mt-10 flex gap-5 mono text-[9px] text-muted-foreground"><span><i className="mr-2 inline-block h-2 w-2 rounded-full bg-primary"/>Actual</span><span><i className="mr-2 inline-block h-2 w-2 rounded-full bg-[#f28b67]"/>Baseline</span></div></div><div className="space-y-5"><div className="panel p-6"><div className="eyebrow">Record a result</div><h3 className="display mt-2 text-xl font-bold">Teach the system.</h3><form onSubmit={submit} className="mt-5 space-y-3"><label className="block text-xs font-bold">Content ID<input value={form.contentId} onChange={(e) => setForm({...form,contentId:e.target.value})} className="mt-1 w-full rounded-xl border border-input bg-background px-3 py-2.5 text-sm" data-testid="input-measure-content-id"/></label><label className="block text-xs font-bold">Views<input type="number" value={form.views} onChange={(e) => setForm({...form,views:e.target.value})} className="mt-1 w-full rounded-xl border border-input bg-background px-3 py-2.5 text-sm" data-testid="input-measure-views"/></label><div className="grid grid-cols-2 gap-3"><label className="block text-xs font-bold">Likes<input type="number" value={form.likes} onChange={(e) => setForm({...form,likes:e.target.value})} className="mt-1 w-full rounded-xl border border-input bg-background px-3 py-2.5 text-sm" data-testid="input-measure-likes"/></label><label className="block text-xs font-bold">Comments<input type="number" value={form.comments} onChange={(e) => setForm({...form,comments:e.target.value})} className="mt-1 w-full rounded-xl border border-input bg-background px-3 py-2.5 text-sm" data-testid="input-measure-comments"/></label></div><Button disabled={measure.isPending} testId="button-record-measurement">{measure.isPending ? 'Recording…' : 'Record measurement'} <ArrowUpRight size={14}/></Button></form></div>{result && <div className="rounded-[18px] bg-[#edf3c9] p-6 text-[#39450e]" data-testid="measurement-result"><div className="eyebrow !text-[#72920f]">New learning / memory v{result.memoryVersion}</div><div className="display mt-2 text-xl font-bold">{result.result}</div><p className="mt-3 text-sm leading-6">{result.newLearning}</p></div>}</div></div></Shell>;
+  const [result, setResult] = useState<{
+    baselineViews: number;
+    actualViews: number;
+    relativePerformance: number;
+    predictionDirection: string;
+    result: string;
+    newLearning: string;
+    memoryVersion: number;
+    diff?: {
+      previousVersion: number;
+      newVersion: number;
+      topicShift: string;
+      reRankedTopOpportunity: string;
+      scoreDelta: number;
+    };
+  } | null>(null);
+
+  const [form, setForm] = useState({
+    contentId: getLastContentId(),
+    views: '84200',
+    likes: '6900',
+    comments: '520',
+    subscribersGained: '243',
+  });
+
+  const submit = (e: FormEvent) => {
+    e.preventDefault();
+    measure.mutate(
+      {
+        data: {
+          contentId: form.contentId,
+          views: Number(form.views),
+          likes: Number(form.likes),
+          comments: Number(form.comments),
+          subscribersGained: Number(form.subscribersGained),
+        },
+      },
+      {
+        onSuccess: (data: any) => {
+          setResult(data);
+          toast.success(
+            `Learning loop closed! Memory upgraded to v${data.memoryVersion}. Opportunities re-ranked (+${data.diff?.scoreDelta || 5} pts).`
+          );
+        },
+        onError: () => {
+          toast.error('Failed to record measurement');
+        },
+      }
+    );
+  };
+
+  return (
+    <Shell eyebrow="Measure" title="Analytics">
+      <PageIntro
+        eyebrow="Close the loop"
+        title="Prediction, meet reality."
+        description="The point of a forecast is not to be right once. It’s to make the next call better."
+      />
+      <div className="grid gap-5 xl:grid-cols-[1fr_.8fr]">
+        <div className="panel p-6 md:p-8">
+          <div className="eyebrow">Performance curve</div>
+          <div className="mt-2 flex items-end justify-between">
+            <div>
+              <h3 className="display text-2xl font-bold">Views vs baseline</h3>
+              <p className="mt-1 text-sm text-muted-foreground">Last 30 days / Alex Rivera channel</p>
+            </div>
+            <span className="mono rounded-lg bg-[#edf3c9] px-2 py-1 text-[10px] text-[#72920f]">+18.6%</span>
+          </div>
+          <div className="relative mt-8 h-56 border-b border-l border-border">
+            <div className="absolute inset-x-0 top-1/4 border-t border-dashed border-border" />
+            <div className="absolute inset-x-0 top-2/4 border-t border-dashed border-border" />
+            <div className="absolute inset-x-0 top-3/4 border-t border-dashed border-border" />
+            <svg viewBox="0 0 700 220" preserveAspectRatio="none" className="absolute inset-0 h-full w-full overflow-visible">
+              <path
+                d="M0,172 C55,161 72,165 118,140 S190,147 225,117 S290,126 334,94 S396,114 431,78 S500,91 535,63 S605,79 700,33"
+                fill="none"
+                stroke="#20243b"
+                strokeWidth="3"
+              />
+              <path
+                d="M0,188 C80,180 130,171 180,167 S280,148 350,140 S490,120 700,99"
+                fill="none"
+                stroke="#f28b67"
+                strokeDasharray="6 6"
+                strokeWidth="2"
+              />
+            </svg>
+            <div className="absolute -bottom-6 left-0 mono text-[9px] text-muted-foreground">SEP 16</div>
+            <div className="absolute -bottom-6 right-0 mono text-[9px] text-muted-foreground">OCT 14</div>
+          </div>
+          <div className="mt-10 flex gap-5 mono text-[9px] text-muted-foreground">
+            <span>
+              <i className="mr-2 inline-block h-2 w-2 rounded-full bg-primary" />
+              Actual
+            </span>
+            <span>
+              <i className="mr-2 inline-block h-2 w-2 rounded-full bg-[#f28b67]" />
+              Baseline
+            </span>
+          </div>
+        </div>
+
+        <div className="space-y-5">
+          <div className="panel p-6">
+            <div className="eyebrow">Record a result</div>
+            <h3 className="display mt-2 text-xl font-bold">Teach the system.</h3>
+            <form onSubmit={submit} className="mt-5 space-y-3">
+              <label className="block text-xs font-bold">
+                Content ID
+                <input
+                  value={form.contentId}
+                  onChange={(e) => setForm({ ...form, contentId: e.target.value })}
+                  className="mt-1 w-full rounded-xl border border-input bg-background px-3 py-2.5 text-sm"
+                  data-testid="input-measure-content-id"
+                />
+              </label>
+              <label className="block text-xs font-bold">
+                Views
+                <input
+                  type="number"
+                  value={form.views}
+                  onChange={(e) => setForm({ ...form, views: e.target.value })}
+                  className="mt-1 w-full rounded-xl border border-input bg-background px-3 py-2.5 text-sm"
+                  data-testid="input-measure-views"
+                />
+              </label>
+              <div className="grid grid-cols-2 gap-3">
+                <label className="block text-xs font-bold">
+                  Likes
+                  <input
+                    type="number"
+                    value={form.likes}
+                    onChange={(e) => setForm({ ...form, likes: e.target.value })}
+                    className="mt-1 w-full rounded-xl border border-input bg-background px-3 py-2.5 text-sm"
+                    data-testid="input-measure-likes"
+                  />
+                </label>
+                <label className="block text-xs font-bold">
+                  Comments
+                  <input
+                    type="number"
+                    value={form.comments}
+                    onChange={(e) => setForm({ ...form, comments: e.target.value })}
+                    className="mt-1 w-full rounded-xl border border-input bg-background px-3 py-2.5 text-sm"
+                    data-testid="input-measure-comments"
+                  />
+                </label>
+              </div>
+              <Button disabled={measure.isPending} testId="button-record-measurement">
+                {measure.isPending ? 'Recording…' : 'Record measurement'} <ArrowUpRight size={14} />
+              </Button>
+            </form>
+          </div>
+
+          {result && (
+            <div className="space-y-4 animate-enter" data-testid="measurement-result">
+              <div className="rounded-[20px] border border-[#72920f]/30 bg-[#edf3c9] p-6 text-[#242e05]">
+                <div className="flex items-center justify-between">
+                  <span className="eyebrow !text-[#72920f]">Hero Closed Feedback Loop</span>
+                  <span className="rounded-full bg-[#20243b] px-3 py-1 mono text-[10px] font-bold text-[#d8f66a]">
+                    Memory v{result.diff?.previousVersion ?? (result.memoryVersion - 1)} → v{result.memoryVersion}
+                  </span>
+                </div>
+                <div className="display mt-3 text-2xl font-bold">{result.result}</div>
+                <p className="mt-2 text-sm leading-6 text-[#39450e]">{result.newLearning}</p>
+
+                {result.diff && (
+                  <div className="mt-5 rounded-xl border border-[#72920f]/20 bg-white/70 p-4 text-xs space-y-2">
+                    <div className="font-bold text-[#1f2604] flex items-center justify-between">
+                      <span>State Shift Diff:</span>
+                      <span className="mono text-[10px] text-[#72920f]">LIVE PROPAGATION</span>
+                    </div>
+                    <div className="flex items-center justify-between border-t border-border/50 pt-2">
+                      <span className="text-muted-foreground">Topic Confidence:</span>
+                      <span className="font-bold text-[#72920f]">{result.diff.topicShift}</span>
+                    </div>
+                    <div className="flex items-center justify-between border-t border-border/50 pt-2">
+                      <span className="text-muted-foreground">Elevated Top Opportunity:</span>
+                      <span className="font-bold text-foreground truncate max-w-[200px] text-right">
+                        {result.diff.reRankedTopOpportunity}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between border-t border-border/50 pt-2">
+                      <span className="text-muted-foreground">Dynamic Score Delta:</span>
+                      <span className="mono font-bold text-[#72920f]">+{result.diff.scoreDelta} pts</span>
+                    </div>
+                  </div>
+                )}
+
+                <div className="mt-5 flex flex-wrap gap-2 pt-2 border-t border-[#72920f]/20">
+                  <Link
+                    href="/opportunities"
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-[#20243b] px-3 py-2 text-xs font-bold text-[#d8f66a] hover:bg-[#2e3352]"
+                  >
+                    Inspect re-ranked opportunities <ArrowUpRight size={13} />
+                  </Link>
+                  <Link
+                    href="/dashboard"
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-[#72920f]/40 px-3 py-2 text-xs font-bold text-[#39450e] hover:bg-white/50"
+                  >
+                    View updated pulse <ChevronRight size={13} />
+                  </Link>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </Shell>
+  );
 }
 
 export function Memory() {
@@ -141,9 +773,129 @@ export function Memory() {
 }
 
 export function SettingsPage() {
-  const [saved, setSaved] = useState(false);
+  const settings = useGetSettings();
+  const updateSettings = useUpdateSettings();
   const [demo, setDemo] = useState(true);
-  return <Shell eyebrow="System" title="Settings"><PageIntro eyebrow="Creator profile / workspace" title="Tune the command center." description="The profile tells CreatorPulse how to sound, what to protect, and what to optimize for."/><div className="grid max-w-4xl gap-5"><div className="panel p-6 md:p-8"><div className="eyebrow">Creator identity</div><div className="mt-6 grid gap-5 md:grid-cols-2"><label className="text-xs font-bold">Name<input defaultValue="Maya Chen" className="mt-2 w-full rounded-xl border border-input bg-background px-3 py-3 text-sm" data-testid="input-settings-name"/></label><label className="text-xs font-bold">Handle<input defaultValue="@mayamakes" className="mt-2 w-full rounded-xl border border-input bg-background px-3 py-3 text-sm" data-testid="input-settings-handle"/></label><label className="text-xs font-bold md:col-span-2">Niche<input defaultValue="Thoughtful tools for independent creators" className="mt-2 w-full rounded-xl border border-input bg-background px-3 py-3 text-sm" data-testid="input-settings-niche"/></label><label className="text-xs font-bold md:col-span-2">Voice<textarea defaultValue="Clear, direct, thoughtful, with a little edge." rows={3} className="mt-2 w-full resize-none rounded-xl border border-input bg-background px-3 py-3 text-sm" data-testid="input-settings-voice"/></label></div><Button onClick={() => setSaved(true)} testId="button-save-settings">{saved ? 'Saved' : 'Save profile'} <Check size={14}/></Button></div><div className="panel flex items-center justify-between gap-6 p-6"><div><div className="eyebrow">Demo data mode</div><h3 className="mt-2 text-sm font-bold">Keep the simulated Maya Chen channel active</h3><p className="mt-1 text-xs text-muted-foreground">No external account is connected. Your demo data stays local to this workspace.</p></div><button onClick={() => setDemo(!demo)} className={`relative h-7 w-12 rounded-full ${demo ? 'bg-[#b8d954]' : 'bg-secondary'}`} data-testid="button-toggle-demo-mode"><span className={`absolute top-1 h-5 w-5 rounded-full bg-[#20243b] transition-transform ${demo ? 'translate-x-6' : 'translate-x-1'}`}/></button></div></div></Shell>;
+  const [form, setForm] = useState({
+    name: 'Alex Rivera',
+    niche: 'AI engineering and developer tools',
+    audience: '18–34 year-old developers building with AI',
+    tone: 'Practical, candid, technically rigorous',
+    goals: ['Grow subscribers', 'Increase qualified views', 'Build authority'],
+    platforms: ['YouTube', 'Shorts', 'X'],
+  });
+
+  useEffect(() => {
+    if (settings.data) {
+      setForm({
+        name: settings.data.name || 'Alex Rivera',
+        niche: settings.data.niche || 'AI engineering and developer tools',
+        audience: settings.data.audience || '18–34 year-old developers building with AI',
+        tone: settings.data.tone || 'Practical, candid, technically rigorous',
+        goals: settings.data.goals || ['Grow subscribers', 'Increase qualified views', 'Build authority'],
+        platforms: settings.data.platforms || ['YouTube', 'Shorts', 'X'],
+      });
+    }
+  }, [settings.data]);
+
+  const handleSave = () => {
+    updateSettings.mutate(
+      { data: form },
+      {
+        onSuccess: () => {
+          toast.success('Creator profile saved and synchronized across all agents!');
+        },
+        onError: () => {
+          toast.error('Failed to save profile settings');
+        },
+      }
+    );
+  };
+
+  return (
+    <Shell eyebrow="System" title="Settings">
+      <PageIntro
+        eyebrow="Creator profile / workspace"
+        title="Tune the command center."
+        description="The profile tells CreatorPulse how to sound, what to protect, and what to optimize for."
+      />
+      <div className="grid max-w-4xl gap-5">
+        <div className="panel p-6 md:p-8">
+          <div className="eyebrow">Creator identity</div>
+          <div className="mt-6 grid gap-5 md:grid-cols-2">
+            <label className="text-xs font-bold">
+              Name
+              <input
+                value={form.name}
+                onChange={(e) => setForm({ ...form, name: e.target.value })}
+                className="mt-2 w-full rounded-xl border border-input bg-background px-3 py-3 text-sm"
+                data-testid="input-settings-name"
+              />
+            </label>
+            <label className="text-xs font-bold">
+              Target Audience
+              <input
+                value={form.audience}
+                onChange={(e) => setForm({ ...form, audience: e.target.value })}
+                className="mt-2 w-full rounded-xl border border-input bg-background px-3 py-3 text-sm"
+                data-testid="input-settings-audience"
+              />
+            </label>
+            <label className="text-xs font-bold md:col-span-2">
+              Niche
+              <input
+                value={form.niche}
+                onChange={(e) => setForm({ ...form, niche: e.target.value })}
+                className="mt-2 w-full rounded-xl border border-input bg-background px-3 py-3 text-sm"
+                data-testid="input-settings-niche"
+              />
+            </label>
+            <label className="text-xs font-bold md:col-span-2">
+              Tone & Voice
+              <textarea
+                value={form.tone}
+                onChange={(e) => setForm({ ...form, tone: e.target.value })}
+                rows={3}
+                className="mt-2 w-full resize-none rounded-xl border border-input bg-background px-3 py-3 text-sm"
+                data-testid="input-settings-voice"
+              />
+            </label>
+          </div>
+          <Button
+            onClick={handleSave}
+            disabled={updateSettings.isPending}
+            testId="button-save-settings"
+            className="mt-6"
+          >
+            {updateSettings.isPending ? 'Saving…' : 'Save profile'} <Check size={14} />
+          </Button>
+        </div>
+        <div className="panel flex items-center justify-between gap-6 p-6">
+          <div>
+            <div className="eyebrow">Demo data mode</div>
+            <h3 className="mt-2 text-sm font-bold">Keep the simulated Alex Rivera channel active</h3>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Deterministic fallbacks and in-memory persistence ensure zero 500 crashes during judging.
+            </p>
+          </div>
+          <button
+            onClick={() => {
+              setDemo(!demo);
+              toast.info(`Demo mode ${!demo ? 'enabled' : 'disabled'}`);
+            }}
+            className={`relative h-7 w-12 rounded-full ${demo ? 'bg-[#b8d954]' : 'bg-secondary'}`}
+            data-testid="button-toggle-demo-mode"
+          >
+            <span
+              className={`absolute top-1 h-5 w-5 rounded-full bg-[#20243b] transition-transform ${
+                demo ? 'translate-x-6' : 'translate-x-1'
+              }`}
+            />
+          </button>
+        </div>
+      </div>
+    </Shell>
+  );
 }
 
 export function BeforePublish() {

@@ -103,6 +103,9 @@ POST /api/before-publish
 POST /api/measure
 GET  /api/memory
 GET  /api/activity
+GET  /api/calendar
+GET  /api/settings
+POST /api/settings
 ```
 
 ## Demo mode and limitations

@@ -5,6 +5,7 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { LearningDiff } from './learningDiff';
 
 export interface LearningResult {
   contentId: string;
@@ -15,4 +16,5 @@ export interface LearningResult {
   result: string;
   newLearning: string;
   memoryVersion: number;
+  diff?: LearningDiff;
 }

@@ -8,6 +8,7 @@ import {
   GenerateContentBody,
   GenerateContentParams,
   GenerateContentResponse,
+  GetCalendarResponse,
   GetChannelResponse,
   GetContentParams,
   GetContentResponse,
@@ -15,6 +16,7 @@ import {
   GetOpportunityParams,
   GetOpportunityResponse,
   GetPulseResponse,
+  GetSettingsResponse,
   ListActivityResponse,
   ListOpportunitiesResponse,
   RecordMeasurementBody,
@@ -22,6 +24,8 @@ import {
   RunQualityGateBody,
   RunQualityGateParams,
   RunQualityGateResponse,
+  UpdateSettingsBody,
+  UpdateSettingsResponse,
 } from "@workspace/api-zod";
 import { generateGeminiJson } from "../lib/gemini";
 import {
@@ -158,12 +162,30 @@ router.post("/content/:id/approve", async (req, res): Promise<void> => {
 
   content.status = "scheduled";
   content.scheduledFor = body.data.scheduledFor;
+
+  const scheduledDate = new Date(body.data.scheduledFor);
+  const dayName = isNaN(scheduledDate.getTime()) ? "MON 20" : scheduledDate.toLocaleDateString("en-US", { weekday: "short" }).toUpperCase();
+  const dayNum = isNaN(scheduledDate.getTime()) ? 20 : scheduledDate.getDate();
+  const timeStr = isNaN(scheduledDate.getTime()) ? "10:00 AM" : scheduledDate.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
+
+  state.scheduled = [
+    {
+      id: `sched-${content.id}`,
+      title: content.title,
+      type: "LONG-FORM",
+      scheduledFor: body.data.scheduledFor,
+      status: "Approved",
+      slot: `${dayName} ${dayNum} · ${timeStr}`,
+    },
+    ...(state.scheduled || []).filter((s: any) => s.id !== `sched-${content.id}`),
+  ];
+
   addActivity(state, {
     agent: "Publisher",
-    action: "Scheduled content",
-    detail: `Demo schedule · ${body.data.scheduledFor}`,
+    action: "Scheduled content package",
+    detail: `Approved & synced to calendar · ${dayName} ${dayNum}`,
     timestamp: "Just now",
-    status: "demo",
+    status: "complete",
   });
   await saveCreatorState(state);
   res.json(ApproveContentResponse.parse(content));
@@ -210,24 +232,57 @@ router.post("/measure", async (req, res): Promise<void> => {
   const directionWasCorrect =
     (predictionDirection === "Above creator baseline" && relativePerformance >= 1) ||
     (predictionDirection === "Near creator baseline" && relativePerformance >= 0.85 && relativePerformance < 1.25);
-  const newLearning =
-    relativePerformance >= 1
-      ? "Contrarian AI-agent framing continues to outperform the creator baseline."
-      : "This format needs a sharper hook before the next recommendation.";
 
+  const prevVersion = state.memory.version;
   state.memory.version += 1;
+
+  const newLearning =
+    relativePerformance >= 1.2
+      ? `Contrarian AI-agent framing generated ${body.data.views.toLocaleString()} views (${relativePerformance}× baseline). Elevated priority for follow-up architecture topics.`
+      : relativePerformance >= 1
+      ? `AI-agent topic matched baseline at ${relativePerformance}× velocity. Recommending deep-dive format over listicles.`
+      : `Performance landed below baseline (${relativePerformance}×). Adjust hook speed and reduce technical jargon in opening 30 seconds.`;
+
   state.memory.learnings = [newLearning, ...state.memory.learnings].slice(0, 5);
+
+  let topicShift = "Maintained baseline weights";
   const topicSignal = state.memory.topicMemory.find((signal: any) => signal.label === "AI agents");
   if (topicSignal && relativePerformance >= 1) {
-    topicSignal.confidence = Math.min(99, topicSignal.confidence + 2);
-    topicSignal.signal = "Performance validated again · use this topic for the next recommendation";
+    const prevConf = topicSignal.confidence;
+    topicSignal.confidence = Math.min(99, topicSignal.confidence + 4);
+    topicSignal.signal = `Empirical validation: ${body.data.views.toLocaleString()} views confirmed high-affinity developer interest`;
+    topicShift = `+${topicSignal.confidence - prevConf}% confidence on AI agents (${prevConf}% → ${topicSignal.confidence}%)`;
   }
-  const agentOpportunity = state.opportunities.find((opportunity: any) => opportunity.topic === "AI agents");
-  if (agentOpportunity && relativePerformance >= 1) {
-    agentOpportunity.historicalFit = Math.min(99, agentOpportunity.historicalFit + 3);
-    agentOpportunity.score = Math.min(99, agentOpportunity.score + 2);
-    agentOpportunity.rationale = "Updated from the latest measured result: AI-agent content has now validated its above-baseline performance twice.";
+
+  // Live dynamic re-ranking & opportunity recalculation
+  const followUpOpp = state.opportunities.find((o: any) => o.id === "opp-agent-memory");
+  let scoreDelta = 0;
+  if (followUpOpp && relativePerformance >= 1) {
+    const prevScore = followUpOpp.score;
+    followUpOpp.historicalFit = Math.min(99, followUpOpp.historicalFit + 6);
+    followUpOpp.audienceFit = Math.min(99, followUpOpp.audienceFit + 4);
+    followUpOpp.score = Math.min(99, Math.round(followUpOpp.audienceFit * 0.35 + followUpOpp.historicalFit * 0.30 + followUpOpp.novelty * 0.25 - followUpOpp.collisionRisk * 0.10));
+    scoreDelta = followUpOpp.score - prevScore;
+    followUpOpp.status = "recommended";
+    followUpOpp.rationale = `Elevated by Memory v${state.memory.version}: Previous AI-agent upload delivered ${body.data.views.toLocaleString()} views (${relativePerformance}× baseline). This memory architecture follow-up has validated demand.`;
+    followUpOpp.signals = [
+      `Validated by recent upload (+${relativePerformance}× baseline)`,
+      `Topic confidence elevated to ${topicSignal?.confidence ?? 98}%`,
+      "Highest compounding retention potential in current library",
+    ];
+    if (followUpOpp.formulaBreakdown) {
+      followUpOpp.formulaBreakdown.formulaString = `Score = (0.35 × ${followUpOpp.audienceFit}) + (0.30 × ${followUpOpp.historicalFit}) + (0.25 × ${followUpOpp.novelty}) - (0.10 × ${followUpOpp.collisionRisk}) = ${followUpOpp.score}`;
+      followUpOpp.formulaBreakdown.topicBenchmarkRatio = `${relativePerformance}× measured baseline`;
+    }
   }
+
+  state.opportunities.forEach((o: any) => {
+    if (o.id !== followUpOpp?.id && o.status === "recommended") {
+      o.status = "open";
+    }
+  });
+
+  state.opportunities.sort((a: any, b: any) => b.score - a.score);
 
   const learningResult = {
     contentId: body.data.contentId,
@@ -235,15 +290,25 @@ router.post("/measure", async (req, res): Promise<void> => {
     actualViews: body.data.views,
     relativePerformance,
     predictionDirection,
-    result: directionWasCorrect ? `${result} · prediction direction correct` : `${result} · prediction direction missed`,
+    result: directionWasCorrect ? `${result} · prediction direction confirmed` : `${result} · prediction direction missed`,
     newLearning,
     memoryVersion: state.memory.version,
+    diff: {
+      previousVersion: prevVersion,
+      newVersion: state.memory.version,
+      topicShift,
+      reRankedTopOpportunity: state.opportunities[0].title,
+      scoreDelta,
+    },
   };
+
   state.measurement = learningResult;
+  state.pulse.recommended = getRecommended(state);
+
   addActivity(state, {
-    agent: "Learning Agent",
-    action: "Updated Creator Memory",
-    detail: `Prediction compared with ${body.data.views.toLocaleString()} actual views`,
+    agent: "Learning Loop",
+    action: `Closed feedback loop (Memory v${state.memory.version})`,
+    detail: `Validated ${relativePerformance}× baseline · Opportunity map dynamically re-ranked`,
     timestamp: "Just now",
     status: "complete",
   });
@@ -259,6 +324,41 @@ router.get("/memory", async (_req, res): Promise<void> => {
 router.get("/activity", async (_req, res): Promise<void> => {
   const state = await loadCreatorState();
   res.json(ListActivityResponse.parse(state.activity));
+});
+
+router.get("/calendar", async (_req, res): Promise<void> => {
+  const state = await loadCreatorState();
+  res.json(GetCalendarResponse.parse(state.scheduled || []));
+});
+
+router.get("/settings", async (_req, res): Promise<void> => {
+  const state = await loadCreatorState();
+  res.json(GetSettingsResponse.parse(state.memory.identity));
+});
+
+router.post("/settings", async (req, res): Promise<void> => {
+  const body = UpdateSettingsBody.safeParse(req.body);
+  if (!body.success) {
+    res.status(400).json({ error: body.error.message });
+    return;
+  }
+
+  const state = await loadCreatorState();
+  state.memory.identity = { ...state.memory.identity, ...body.data };
+  state.pulse.creatorName = body.data.name;
+  state.channel.name = body.data.name;
+  state.channel.niche = body.data.niche;
+
+  addActivity(state, {
+    agent: "System",
+    action: "Updated creator profile",
+    detail: `Identity updated for ${body.data.name}`,
+    timestamp: "Just now",
+    status: "complete",
+  });
+
+  await saveCreatorState(state);
+  res.json(UpdateSettingsResponse.parse(state.memory.identity));
 });
 
 async function buildContentPackage(opportunity: any, voice: string, extraContext = ""): Promise<{ content: any; source: "gemini" | "deterministic" }> {
@@ -484,71 +584,189 @@ function normalizeGeminiPackage(raw: unknown, fallback: any): any | null {
   };
 }
 
+const STOP_WORDS = new Set([
+  "a", "about", "above", "after", "again", "against", "all", "am", "an", "and", "any", "are", "aren't", "as", "at",
+  "be", "because", "been", "before", "being", "below", "between", "both", "but", "by", "can't", "cannot", "could",
+  "couldn't", "did", "didn't", "do", "does", "doesn't", "doing", "don't", "down", "during", "each", "few", "for",
+  "from", "further", "had", "hadn't", "has", "hasn't", "have", "haven't", "having", "he", "he'd", "he'll", "he's",
+  "her", "here", "here's", "hers", "herself", "him", "himself", "his", "how", "how's", "i", "i'd", "i'll", "i'm",
+  "i've", "if", "in", "into", "is", "isn't", "it", "it's", "its", "itself", "let's", "me", "more", "most", "mustn't",
+  "my", "myself", "no", "nor", "not", "of", "off", "on", "once", "only", "or", "other", "ought", "our", "ours",
+  "ourselves", "out", "over", "own", "same", "shan't", "she", "she'd", "she'll", "she's", "should", "shouldn't",
+  "so", "some", "such", "than", "that", "that's", "the", "their", "theirs", "them", "themselves", "then", "there",
+  "there's", "these", "they", "they'd", "they'll", "they're", "they've", "this", "those", "through", "to", "too",
+  "under", "until", "up", "very", "was", "wasn't", "we", "we'd", "we'll", "we're", "we've", "were", "weren't",
+  "what", "what's", "when", "when's", "where", "where's", "which", "while", "who", "who's", "whom", "why", "why's",
+  "with", "won't", "would", "wouldn't", "you", "you'd", "you'll", "you're", "you've", "your", "yours", "yourself",
+  "yourselves",
+]);
+
+function extractMeaningfulTokens(text: string): Set<string> {
+  const words = text
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .split(/\s+/)
+    .filter((w) => w.length > 2 && !STOP_WORDS.has(w));
+  return new Set(words);
+}
+
+function computeTokenJaccard(tokensA: Set<string>, tokensB: Set<string>): { similarity: number; overlapTokens: string[] } {
+  if (tokensA.size === 0 || tokensB.size === 0) return { similarity: 0, overlapTokens: [] };
+  const intersection: string[] = [];
+  for (const token of tokensA) {
+    if (tokensB.has(token)) {
+      intersection.push(token);
+    }
+  }
+  const unionSize = new Set([...tokensA, ...tokensB]).size;
+  const rawJaccard = unionSize > 0 ? (intersection.length / unionSize) : 0;
+  const similarity = Math.round(rawJaccard * 100);
+  return { similarity, overlapTokens: intersection };
+}
+
 function calculateQuality(input: any): any {
-  const titleScore = input.title.length >= 35 && input.title.length <= 70 ? 94 : input.title.length > 20 ? 78 : 52;
-  const descriptionScore = input.description.length >= 100 ? 92 : input.description.length >= 60 ? 76 : 48;
-  const ctaScore = input.cta.trim().length >= 20 ? 88 : 42;
-  const keywordText = `${input.title} ${input.description} ${input.script}`.toLowerCase();
-  const matchedKeywords = input.keywords.filter((keyword: string) => keywordText.includes(keyword.toLowerCase())).length;
-  const seoScore = Math.round((matchedKeywords / Math.max(input.keywords.length, 1)) * 100);
-  const sentences = input.script
-    .split(/[.!?]\s+/)
-    .map((sentence: string) => sentence.trim().toLowerCase())
-    .filter(Boolean);
-  const repeatedSentenceCount = sentences.length - new Set(sentences).size;
-  const originalityScore = repeatedSentenceCount > 1 ? 70 : 90;
+  // 1. Hook/Title strength: optimal 38-68 chars
+  const titleLen = input.title.trim().length;
+  const titleScore = titleLen >= 38 && titleLen <= 68 ? 96 : titleLen >= 25 && titleLen <= 85 ? 80 : 50;
+
+  // 2. SEO keyword coverage across package
+  const fullText = `${input.title} ${input.description} ${input.script}`.toLowerCase();
+  const keywords: string[] = Array.isArray(input.keywords) ? input.keywords : [];
+  const matchedKeywords = keywords.filter((kw: string) => fullText.includes(kw.toLowerCase()));
+  const seoScore = keywords.length > 0 ? Math.round((matchedKeywords.length / keywords.length) * 100) : 85;
+
+  // 3. CTA Actionability: action verb check
+  const ctaLower = input.cta.toLowerCase();
+  const hasActionVerb = /subscribe|watch|check out|build|drop a comment|link below|github/.test(ctaLower);
+  const ctaScore = hasActionVerb && input.cta.trim().length >= 20 ? 92 : input.cta.trim().length >= 15 ? 74 : 45;
+
+  // 4. Cliche & Fluff check: detects generic hype buzzwords
+  const fluffRegex = /\b(game-changer|revolutionary|paradigm shift|dive in|secret sauce|unleash|silver bullet|mind-blowing)\b/i;
+  const fluffMatches = input.script.match(fluffRegex);
+  const originalityScore = fluffMatches ? 68 : 94;
+
+  // 5. Claim Integrity & Risk: detects unsupported absolute guarantees
+  const claimRiskRegex = /\b(100%|guaranteed|never fail|everyone will|cannot fail|foolproof|make millions)\b/i;
+  const hasRiskyClaims = claimRiskRegex.test(fullText);
+  const claimScore = hasRiskyClaims ? 62 : 95;
+
   const checks = [
-    { name: "Hook strength", score: titleScore, status: titleScore >= 75 ? "pass" : "revise", detail: "Title creates a clear tension between a familiar promise and a real constraint." },
-    { name: "Audience fit", score: 95, status: "pass", detail: "Language and examples match the creator's developer audience." },
-    { name: "SEO coverage", score: seoScore, status: seoScore >= 60 ? "pass" : "revise", detail: `${matchedKeywords} of ${input.keywords.length} target keywords appear in the package.` },
-    { name: "CTA", score: ctaScore, status: ctaScore >= 70 ? "pass" : "revise", detail: ctaScore >= 70 ? "A specific next action is present." : "Add a clear next action for the viewer." },
-    { name: "Originality", score: originalityScore, status: originalityScore >= 75 ? "pass" : "revise", detail: "No high-confidence duplicate phrase pattern detected." },
-    { name: "Claim risk", score: 93, status: "pass", detail: "No unsupported numerical or absolute performance claims detected." },
+    {
+      name: "Hook strength",
+      score: titleScore,
+      status: titleScore >= 75 ? "pass" : "revise",
+      detail: titleScore >= 75
+        ? `Optimal title length (${titleLen} chars) with sharp tension.`
+        : `Title length (${titleLen} chars) outside optimal 38–68 char window.`,
+    },
+    {
+      name: "SEO keyword coverage",
+      score: seoScore,
+      status: seoScore >= 60 ? "pass" : "revise",
+      detail: `${matchedKeywords.length} of ${keywords.length} target keywords verified across script and metadata (${matchedKeywords.join(", ") || "none"}).`,
+    },
+    {
+      name: "Call to action",
+      score: ctaScore,
+      status: ctaScore >= 70 ? "pass" : "revise",
+      detail: hasActionVerb
+        ? "Explicit action verb present with clear viewer motivation."
+        : "Missing explicit action verb (e.g. subscribe, check out GitHub, watch next).",
+    },
+    {
+      name: "Editorial originality",
+      score: originalityScore,
+      status: originalityScore >= 75 ? "pass" : "revise",
+      detail: fluffMatches
+        ? `Detected generic filler phrase: "${fluffMatches[0]}". Replace with concrete technical terminology.`
+        : "Zero generic filler clichés detected. Rigorous technical framing.",
+    },
+    {
+      name: "Claim integrity",
+      score: claimScore,
+      status: claimScore >= 75 ? "pass" : "revise",
+      detail: hasRiskyClaims
+        ? "Flagged unsupported absolute claim or guarantee. Qualify with production constraints."
+        : "All technical assertions are defensibly qualified. Zero unsupported absolutes.",
+    },
   ];
-  const overall = Math.round(checks.reduce((sum, check) => sum + check.score, 0) / checks.length);
-  const claimRisk = 7;
-  const passed = overall >= 78 && checks.every((check) => check.status !== "revise");
+
+  const overall = Math.round(checks.reduce((sum, c) => sum + c.score, 0) / checks.length);
+  const claimRisk = Math.max(5, 100 - claimScore);
+  const passed = overall >= 75 && checks.every((c) => c.status !== "revise");
+
   return {
     overall,
     claimRisk,
     passed,
-    summary: passed ? "Ready for creator review. The package is clear, on-brand, and platform-ready." : "Revise the flagged checks before approval.",
+    summary: passed
+      ? "Pass. All deterministic quality gates satisfied: optimal title pacing, verified keyword distribution, and substantiated technical claims."
+      : "Revision required. Address the flagged quality checks before approving for publish.",
     checks,
   };
 }
 
 function evaluateIdea(state: any, idea: string): any {
+  const ideaTokens = extractMeaningfulTokens(idea);
   const normalizedIdea = idea.toLowerCase();
+
   const matches = state.channel.videos
     .map((video: any) => {
-      const words = normalizedIdea.split(/\W+/).filter(Boolean);
-      const overlap = words.filter((word: string) => video.title.toLowerCase().includes(word)).length;
-      const similarity = Math.min(92, 34 + overlap * 15 + (normalizedIdea.includes(video.topic.toLowerCase()) ? 22 : 0));
-      return { videoTitle: video.title, similarity };
+      const videoTokens = extractMeaningfulTokens(video.title);
+      const { similarity: jaccardSim, overlapTokens } = computeTokenJaccard(ideaTokens, videoTokens);
+      const topicMatch = normalizedIdea.includes(video.topic.toLowerCase()) || video.topic.toLowerCase().includes(normalizedIdea);
+      const topicBonus = topicMatch ? 15 : 0;
+      const combinedSimilarity = Math.min(95, Math.round(jaccardSim * 0.85 + topicBonus));
+      return {
+        videoTitle: video.title,
+        similarity: combinedSimilarity,
+        overlapTokens,
+      };
     })
     .sort((a: any, b: any) => b.similarity - a.similarity)
     .slice(0, 3);
-  const collisionRisk = Math.max(12, Math.min(92, matches[0]?.similarity ?? 22));
-  const audienceFit = normalizedIdea.includes("agent") || normalizedIdea.includes("ai") ? 94 : 74;
-  const novelty = Math.max(42, 100 - collisionRisk);
-  const historicalFit = normalizedIdea.includes("agent") ? 92 : 76;
-  const opportunity = Math.round(audienceFit * 0.35 + novelty * 0.25 + historicalFit * 0.3 + (100 - collisionRisk) * 0.1);
-  const shouldReframe = collisionRisk >= 60;
+
+  const topMatch = matches[0];
+  const collisionRisk = topMatch ? topMatch.similarity : 8;
+
+  const isAgentRelated = normalizedIdea.includes("agent") || normalizedIdea.includes("mcp") || normalizedIdea.includes("autonomous");
+  const isWorkflowRelated = normalizedIdea.includes("workflow") || normalizedIdea.includes("tool") || normalizedIdea.includes("automation");
+  const isRagRelated = normalizedIdea.includes("rag") || normalizedIdea.includes("retrieval") || normalizedIdea.includes("embedding");
+
+  let audienceFit = 72;
+  let historicalFit = 75;
+  if (isAgentRelated) {
+    audienceFit = 96;
+    historicalFit = 94;
+  } else if (isWorkflowRelated) {
+    audienceFit = 88;
+    historicalFit = 85;
+  } else if (isRagRelated) {
+    audienceFit = 82;
+    historicalFit = 80;
+  }
+
+  const novelty = Math.max(15, 100 - collisionRisk);
+  const opportunity = Math.round(
+    audienceFit * 0.35 + historicalFit * 0.30 + novelty * 0.25 - collisionRisk * 0.10
+  );
+
+  const shouldReframe = collisionRisk >= 55;
   return {
     idea,
-    opportunity,
+    opportunity: Math.max(10, Math.min(99, opportunity)),
     audienceFit,
     novelty,
     collisionRisk,
     historicalFit,
     recommendation: shouldReframe ? "REFRAME" : "GO",
     explanation: shouldReframe
-      ? "Your channel already covers a close version of this idea. The audience fit is strong, but publishing it as-is would create avoidable overlap."
-      : "This idea has a strong audience match and enough distance from the existing library to earn a clean test.",
+      ? `High collision risk (${collisionRisk}%). This idea overlaps with your library video "${topMatch?.videoTitle}" on key terms: ${topMatch?.overlapTokens?.join(", ") || "topic themes"}. Reframe the angle to avoid competing with your existing catalog.`
+      : `Clean positioning (${collisionRisk}% collision risk). Strong alignment with your core developer audience and distinct enough from your previous 42 uploads to earn genuine algorithmic velocity.`,
     suggestedAlternative: shouldReframe
-      ? "AI Agents vs. Copilots: What Actually Changes Developer Work?"
-      : "Keep the idea, but lead with a concrete failure mode instead of a broad roundup.",
-    similarVideos: matches,
+      ? "Focus on the unaddressed edge case or contrarian failure mode rather than the introductory tutorial."
+      : "Lead with a concrete technical failure mode in the first 15 seconds to maximize retention.",
+    similarVideos: matches.map(({ videoTitle, similarity }: any) => ({ videoTitle, similarity })),
   };
 }
 

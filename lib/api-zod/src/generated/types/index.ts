@@ -8,14 +8,17 @@
 
 export * from './activity';
 export * from './approvalInput';
+export * from './calendarItem';
 export * from './channel';
 export * from './contentPackage';
 export * from './creatorIdentity';
 export * from './creatorMemory';
 export * from './error';
+export * from './formulaBreakdown';
 export * from './generationInput';
 export * from './healthStatus';
 export * from './ideaInput';
+export * from './learningDiff';
 export * from './learningResult';
 export * from './measurementInput';
 export * from './memorySignal';

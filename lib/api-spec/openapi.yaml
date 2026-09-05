@@ -220,6 +220,49 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/Activity"
+  /calendar:
+    get:
+      operationId: getCalendar
+      tags: [creator]
+      summary: Get scheduled content calendar
+      responses:
+        "200":
+          description: Calendar schedule
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CalendarItem"
+  /settings:
+    get:
+      operationId: getSettings
+      tags: [creator]
+      summary: Get creator profile settings
+      responses:
+        "200":
+          description: Creator settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreatorIdentity"
+    post:
+      operationId: updateSettings
+      tags: [creator]
+      summary: Update creator profile settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreatorIdentity"
+      responses:
+        "200":
+          description: Updated creator settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreatorIdentity"
 components:
   parameters:
     Id:
@@ -362,6 +405,8 @@ components:
         prediction:
           $ref: "#/components/schemas/Prediction"
         status: { type: string }
+        formulaBreakdown:
+          $ref: "#/components/schemas/FormulaBreakdown"
     Prediction:
       type: object
       required: [direction, confidence, baselineMultiplier]
@@ -572,6 +617,8 @@ components:
         result: { type: string }
         newLearning: { type: string }
         memoryVersion: { type: number }
+        diff:
+          $ref: "#/components/schemas/LearningDiff"
     CreatorMemory:
       type: object
       required:
@@ -636,4 +683,34 @@ components:
         detail: { type: string }
         timestamp: { type: string }
         status: { type: string }
+    FormulaBreakdown:
+      type: object
+      required: [audienceFitWeight, historicalFitWeight, noveltyWeight, collisionRiskWeight, formulaString, topicBenchmarkRatio, confidenceRationale]
+      properties:
+        audienceFitWeight: { type: string }
+        historicalFitWeight: { type: string }
+        noveltyWeight: { type: string }
+        collisionRiskWeight: { type: string }
+        formulaString: { type: string }
+        topicBenchmarkRatio: { type: string }
+        confidenceRationale: { type: string }
+    LearningDiff:
+      type: object
+      required: [previousVersion, newVersion, topicShift, reRankedTopOpportunity, scoreDelta]
+      properties:
+        previousVersion: { type: number }
+        newVersion: { type: number }
+        topicShift: { type: string }
+        reRankedTopOpportunity: { type: string }
+        scoreDelta: { type: number }
+    CalendarItem:
+      type: object
+      required: [id, title, type, scheduledFor, status, slot]
+      properties:
+        id: { type: string }
+        title: { type: string }
+        type: { type: string }
+        scheduledFor: { type: string }
+        status: { type: string }
+        slot: { type: string }
 

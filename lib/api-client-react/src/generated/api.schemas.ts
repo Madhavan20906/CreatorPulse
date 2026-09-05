@@ -19,6 +19,16 @@ export interface Prediction {
   baselineMultiplier: number;
 }
 
+export interface FormulaBreakdown {
+  audienceFitWeight: string;
+  historicalFitWeight: string;
+  noveltyWeight: string;
+  collisionRiskWeight: string;
+  formulaString: string;
+  topicBenchmarkRatio: string;
+  confidenceRationale: string;
+}
+
 export interface Opportunity {
   id: string;
   title: string;
@@ -35,6 +45,7 @@ export interface Opportunity {
   signals: string[];
   prediction: Prediction;
   status?: string;
+  formulaBreakdown?: FormulaBreakdown;
 }
 
 export interface Activity {
@@ -208,6 +219,14 @@ export interface MeasurementInput {
   subscribersGained?: number;
 }
 
+export interface LearningDiff {
+  previousVersion: number;
+  newVersion: number;
+  topicShift: string;
+  reRankedTopOpportunity: string;
+  scoreDelta: number;
+}
+
 export interface LearningResult {
   contentId: string;
   baselineViews: number;
@@ -217,6 +236,7 @@ export interface LearningResult {
   result: string;
   newLearning: string;
   memoryVersion: number;
+  diff?: LearningDiff;
 }
 
 export interface CreatorIdentity {
@@ -242,5 +262,14 @@ export interface CreatorMemory {
   hookMemory: MemorySignal[];
   timingMemory: MemorySignal[];
   learnings: string[];
+}
+
+export interface CalendarItem {
+  id: string;
+  title: string;
+  type: string;
+  scheduledFor: string;
+  status: string;
+  slot: string;
 }
 

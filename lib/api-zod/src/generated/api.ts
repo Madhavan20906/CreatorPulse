@@ -48,7 +48,16 @@ export const GetPulseResponse = zod.object({
   "confidence": zod.number(),
   "baselineMultiplier": zod.number()
 }),
-  "status": zod.string().optional()
+  "status": zod.string().optional(),
+  "formulaBreakdown": zod.object({
+  "audienceFitWeight": zod.string(),
+  "historicalFitWeight": zod.string(),
+  "noveltyWeight": zod.string(),
+  "collisionRiskWeight": zod.string(),
+  "formulaString": zod.string(),
+  "topicBenchmarkRatio": zod.string(),
+  "confidenceRationale": zod.string()
+}).optional()
 }),
   "recentActivity": zod.array(zod.object({
   "id": zod.string(),
@@ -118,7 +127,16 @@ export const ListOpportunitiesResponseItem = zod.object({
   "confidence": zod.number(),
   "baselineMultiplier": zod.number()
 }),
-  "status": zod.string().optional()
+  "status": zod.string().optional(),
+  "formulaBreakdown": zod.object({
+  "audienceFitWeight": zod.string(),
+  "historicalFitWeight": zod.string(),
+  "noveltyWeight": zod.string(),
+  "collisionRiskWeight": zod.string(),
+  "formulaString": zod.string(),
+  "topicBenchmarkRatio": zod.string(),
+  "confidenceRationale": zod.string()
+}).optional()
 })
 export const ListOpportunitiesResponse = zod.array(ListOpportunitiesResponseItem)
 
@@ -149,7 +167,16 @@ export const GetOpportunityResponse = zod.object({
   "confidence": zod.number(),
   "baselineMultiplier": zod.number()
 }),
-  "status": zod.string().optional()
+  "status": zod.string().optional(),
+  "formulaBreakdown": zod.object({
+  "audienceFitWeight": zod.string(),
+  "historicalFitWeight": zod.string(),
+  "noveltyWeight": zod.string(),
+  "collisionRiskWeight": zod.string(),
+  "formulaString": zod.string(),
+  "topicBenchmarkRatio": zod.string(),
+  "confidenceRationale": zod.string()
+}).optional()
 })
 
 
@@ -400,7 +427,14 @@ export const RecordMeasurementResponse = zod.object({
   "predictionDirection": zod.string(),
   "result": zod.string(),
   "newLearning": zod.string(),
-  "memoryVersion": zod.number()
+  "memoryVersion": zod.number(),
+  "diff": zod.object({
+  "previousVersion": zod.number(),
+  "newVersion": zod.number(),
+  "topicShift": zod.string(),
+  "reRankedTopOpportunity": zod.string(),
+  "scoreDelta": zod.number()
+}).optional()
 })
 
 
@@ -453,5 +487,54 @@ export const ListActivityResponseItem = zod.object({
   "status": zod.string()
 })
 export const ListActivityResponse = zod.array(ListActivityResponseItem)
+
+
+/**
+ * @summary Get scheduled content calendar
+ */
+export const GetCalendarResponseItem = zod.object({
+  "id": zod.string(),
+  "title": zod.string(),
+  "type": zod.string(),
+  "scheduledFor": zod.string(),
+  "status": zod.string(),
+  "slot": zod.string()
+})
+export const GetCalendarResponse = zod.array(GetCalendarResponseItem)
+
+
+/**
+ * @summary Get creator profile settings
+ */
+export const GetSettingsResponse = zod.object({
+  "name": zod.string(),
+  "niche": zod.string(),
+  "audience": zod.string(),
+  "goals": zod.array(zod.string()),
+  "tone": zod.string(),
+  "platforms": zod.array(zod.string())
+})
+
+
+/**
+ * @summary Update creator profile settings
+ */
+export const UpdateSettingsBody = zod.object({
+  "name": zod.string(),
+  "niche": zod.string(),
+  "audience": zod.string(),
+  "goals": zod.array(zod.string()),
+  "tone": zod.string(),
+  "platforms": zod.array(zod.string())
+})
+
+export const UpdateSettingsResponse = zod.object({
+  "name": zod.string(),
+  "niche": zod.string(),
+  "audience": zod.string(),
+  "goals": zod.array(zod.string()),
+  "tone": zod.string(),
+  "platforms": zod.array(zod.string())
+})
 
 

@@ -5,6 +5,7 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { FormulaBreakdown } from './formulaBreakdown';
 import type { Prediction } from './prediction';
 
 export interface Opportunity {
@@ -23,4 +24,5 @@ export interface Opportunity {
   signals: string[];
   prediction: Prediction;
   status?: string;
+  formulaBreakdown?: FormulaBreakdown;
 }
