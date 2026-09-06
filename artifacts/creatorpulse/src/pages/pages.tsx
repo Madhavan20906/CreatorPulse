@@ -440,11 +440,11 @@ export function Opportunities() {
                       <div className="mt-0.5 font-bold text-[#72920f]">{o.formulaBreakdown.historicalFitWeight}</div>
                     </div>
                     <div className="rounded-lg bg-background p-2.5 border border-border/60">
-                      <div className="text-muted-foreground font-semibold">Novelty (20%)</div>
+                      <div className="text-muted-foreground font-semibold">Novelty (25%)</div>
                       <div className="mt-0.5 font-bold text-[#72920f]">{o.formulaBreakdown.noveltyWeight}</div>
                     </div>
                     <div className="rounded-lg bg-background p-2.5 border border-border/60">
-                      <div className="text-muted-foreground font-semibold">Collision Risk (-15%)</div>
+                      <div className="text-muted-foreground font-semibold">Collision Risk (-10%)</div>
                       <div className="mt-0.5 font-bold text-[#c36b4d]">{o.formulaBreakdown.collisionRiskWeight}</div>
                     </div>
                   </div>

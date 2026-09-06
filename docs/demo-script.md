@@ -51,9 +51,9 @@
 * **Voiceover**:
   > *"In the Opportunity Map, every recommendation is defensible. Section 50 of our architecture requires complete mathematical transparency.*
   >
-  > *Judges can click 'Why this score?' directly on the opportunity card to inspect the exact attribution equation: 35% Audience Fit + 30% Historical Fit + 20% Novelty minus 15% Cannibalization Risk.*
+  > *Judges can click 'Why this score?' directly on the opportunity card to inspect the exact attribution equation: 35% Audience Fit + 30% Historical Fit + 25% Novelty minus 10% Cannibalization Risk.*
   >
-  > *Notice our #1 ranked video: 'Why AI agents work in a demo but fail in production' with a score of 91/100 and a 1.96x predicted baseline lift."*
+  > *Notice our #1 ranked video: 'Why AI agents work in a demo but fail in production' with an explainable score of 83/100 and a 1.96x predicted baseline lift."*
 * **Visual Action**:
   - Click **"Why this score? ▼"** on the top opportunity card to expand the formula breakdown in real-time.
   - Click the card to open `OpportunityDetail` (`/opportunities/opp-ai-agents-prod`).

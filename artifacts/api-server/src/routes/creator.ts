@@ -236,95 +236,118 @@ router.post("/measure", async (req, res): Promise<void> => {
   const prevVersion = state.memory.version;
   state.memory.version += 1;
 
-  const isWorkflowTopic =
-    body.data.contentId === "video-41" ||
-    body.data.contentId?.toLowerCase().includes("workflow") ||
-    body.data.contentId?.toLowerCase().includes("mcp") ||
-    prevVersion >= 4;
+  // Determine topic dynamically from content, catalog, or title semantics
+  const catalogVideo = state.channel.videos.find((v: any) => v.id === body.data.contentId);
+  const detectedTopic: string =
+    content.topic ||
+    catalogVideo?.topic ||
+    (body.data.contentId?.toLowerCase().includes("workflow") || content.title?.toLowerCase().includes("mcp") || content.title?.toLowerCase().includes("workflow")
+      ? "Developer workflows"
+      : body.data.contentId?.toLowerCase().includes("rag") || content.title?.toLowerCase().includes("rag")
+      ? "RAG systems"
+      : body.data.contentId?.toLowerCase().includes("python") || content.title?.toLowerCase().includes("python")
+      ? "Python tutorials"
+      : "AI agents");
 
-  let newLearning = "";
-  let topicShift = "Maintained baseline weights";
-  const targetOppId = isWorkflowTopic ? "opp-workflow-shortcuts" : "opp-agent-memory";
-  let scoreDelta = 0;
+  // 1. Dynamic Topic Confidence Shift in Creator Memory
+  let topicSignal = state.memory.topicMemory.find(
+    (signal: any) => signal.label.toLowerCase() === detectedTopic.toLowerCase()
+  );
+  if (!topicSignal) {
+    topicSignal = { label: detectedTopic, signal: "", confidence: 80 };
+    state.memory.topicMemory.push(topicSignal);
+  }
 
-  if (isWorkflowTopic) {
-    newLearning = `Cycle 2 Validation: Developer workflow architecture delivered ${body.data.views.toLocaleString()} views (${relativePerformance}× baseline). Compounding confirmed across multiple topic pillars.`;
-    let wfSignal = state.memory.topicMemory.find((signal: any) => signal.label === "Developer workflows");
-    if (!wfSignal) {
-      wfSignal = { label: "Developer workflows", signal: "", confidence: 88 };
-      state.memory.topicMemory.push(wfSignal);
-    }
-    const prevConf = wfSignal.confidence;
-    wfSignal.confidence = Math.min(99, wfSignal.confidence + 6);
-    wfSignal.signal = `Cycle 2 Empirical validation: ${body.data.views.toLocaleString()} views confirmed high-affinity developer workflow compounding`;
-    topicShift = `+${wfSignal.confidence - prevConf}% confidence on Developer Workflows (${prevConf}% → ${wfSignal.confidence}%)`;
-
-    const followUpOpp = state.opportunities.find((o: any) => o.id === "opp-workflow-shortcuts") || state.opportunities[1];
-    if (followUpOpp && relativePerformance >= 1) {
-      const prevScore = followUpOpp.score;
-      followUpOpp.historicalFit = Math.min(99, followUpOpp.historicalFit + 8);
-      followUpOpp.audienceFit = Math.min(99, followUpOpp.audienceFit + 5);
-      followUpOpp.score = Math.min(99, Math.round(followUpOpp.audienceFit * 0.35 + followUpOpp.historicalFit * 0.30 + followUpOpp.novelty * 0.25 - followUpOpp.collisionRisk * 0.10));
-      scoreDelta = followUpOpp.score - prevScore;
-      followUpOpp.status = "recommended";
-      followUpOpp.rationale = `Elevated by Memory v${state.memory.version} (Cycle 2 Compounding): Workflow architecture video confirmed high retention (+${relativePerformance}× baseline). Compounding shortcuts now lead the opportunity map.`;
-      followUpOpp.signals = [
-        `Validated by Cycle 2 upload (+${relativePerformance}× baseline)`,
-        `Topic confidence elevated to ${wfSignal.confidence}%`,
-        "Strongest secondary compounding pillar in channel history",
-      ];
-      if (followUpOpp.formulaBreakdown) {
-        followUpOpp.formulaBreakdown.formulaString = `Score = (0.35 × ${followUpOpp.audienceFit}) + (0.30 × ${followUpOpp.historicalFit}) + (0.25 × ${followUpOpp.novelty}) - (0.10 × ${followUpOpp.collisionRisk}) = ${followUpOpp.score}`;
-        followUpOpp.formulaBreakdown.topicBenchmarkRatio = `${relativePerformance}× measured baseline`;
-      }
-    }
+  const prevConf = topicSignal.confidence;
+  let topicShift = "";
+  if (relativePerformance >= 1) {
+    const gain = relativePerformance >= 1.5 ? 6 : 4;
+    topicSignal.confidence = Math.min(99, topicSignal.confidence + gain);
+    topicSignal.signal = `Empirical validation: ${body.data.views.toLocaleString()} views (${relativePerformance}× baseline) confirmed high-affinity creator resonance`;
+    topicShift = `+${topicSignal.confidence - prevConf}% confidence on ${detectedTopic} (${prevConf}% → ${topicSignal.confidence}%)`;
   } else {
-    newLearning =
-      relativePerformance >= 1.2
-        ? `Contrarian AI-agent framing generated ${body.data.views.toLocaleString()} views (${relativePerformance}× baseline). Elevated priority for follow-up architecture topics.`
-        : relativePerformance >= 1
-        ? `AI-agent topic matched baseline at ${relativePerformance}× velocity. Recommending deep-dive format over listicles.`
-        : `Performance landed below baseline (${relativePerformance}×). Adjust hook speed and reduce technical jargon in opening 30 seconds.`;
+    const drop = 3;
+    topicSignal.confidence = Math.max(40, topicSignal.confidence - drop);
+    topicSignal.signal = `Measured underperformance: ${body.data.views.toLocaleString()} views (${relativePerformance}× baseline) suggests topic fatigue or format revision`;
+    topicShift = `-${prevConf - topicSignal.confidence}% confidence on ${detectedTopic} (${prevConf}% → ${topicSignal.confidence}%)`;
+  }
 
-    const topicSignal = state.memory.topicMemory.find((signal: any) => signal.label === "AI agents");
-    if (topicSignal && relativePerformance >= 1) {
-      const prevConf = topicSignal.confidence;
-      topicSignal.confidence = Math.min(99, topicSignal.confidence + 4);
-      topicSignal.signal = `Empirical validation: ${body.data.views.toLocaleString()} views confirmed high-affinity developer interest`;
-      topicShift = `+${topicSignal.confidence - prevConf}% confidence on AI agents (${prevConf}% → ${topicSignal.confidence}%)`;
-    }
-
-    const followUpOpp = state.opportunities.find((o: any) => o.id === "opp-agent-memory");
-    if (followUpOpp && relativePerformance >= 1) {
-      const prevScore = followUpOpp.score;
-      followUpOpp.historicalFit = Math.min(99, followUpOpp.historicalFit + 6);
-      followUpOpp.audienceFit = Math.min(99, followUpOpp.audienceFit + 4);
-      followUpOpp.score = Math.min(99, Math.round(followUpOpp.audienceFit * 0.35 + followUpOpp.historicalFit * 0.30 + followUpOpp.novelty * 0.25 - followUpOpp.collisionRisk * 0.10));
-      scoreDelta = followUpOpp.score - prevScore;
-      followUpOpp.status = "recommended";
-      followUpOpp.rationale = `Elevated by Memory v${state.memory.version}: Previous AI-agent upload delivered ${body.data.views.toLocaleString()} views (${relativePerformance}× baseline). This memory architecture follow-up has validated demand.`;
-      followUpOpp.signals = [
-        `Validated by recent upload (+${relativePerformance}× baseline)`,
-        `Topic confidence elevated to ${topicSignal?.confidence ?? 98}%`,
-        "Highest compounding retention potential in current library",
-      ];
-      if (followUpOpp.formulaBreakdown) {
-        followUpOpp.formulaBreakdown.formulaString = `Score = (0.35 × ${followUpOpp.audienceFit}) + (0.30 × ${followUpOpp.historicalFit}) + (0.25 × ${followUpOpp.novelty}) - (0.10 × ${followUpOpp.collisionRisk}) = ${followUpOpp.score}`;
-        followUpOpp.formulaBreakdown.topicBenchmarkRatio = `${relativePerformance}× measured baseline`;
-      }
+  // Sync channel topic views and fit
+  const chTopic = state.channel.topics.find((t: any) => t.name.toLowerCase() === detectedTopic.toLowerCase());
+  if (chTopic) {
+    chTopic.views += body.data.views;
+    if (relativePerformance >= 1) {
+      chTopic.audienceFit = Math.min(99, chTopic.audienceFit + (relativePerformance >= 1.5 ? 3 : 2));
     }
   }
 
+  // 2. Synthesize Empirical Learning Log
+  const newLearning = relativePerformance >= 1.2
+    ? `Cycle ${state.memory.version - 2} Validation: "${content.title}" delivered ${body.data.views.toLocaleString()} views (${relativePerformance}× baseline). Elevated priority for ${detectedTopic}.`
+    : relativePerformance >= 1
+    ? `Cycle ${state.memory.version - 2} Validation: "${content.title}" met expectations at ${relativePerformance}× baseline. Compounding confirmed for ${detectedTopic}.`
+    : `Cycle ${state.memory.version - 2} Measurement: "${content.title}" landed below baseline (${relativePerformance}×). Recommend adjusting hook and packaging for ${detectedTopic}.`;
+
   state.memory.learnings = [newLearning, ...state.memory.learnings].slice(0, 5);
 
-  const activeOpp = state.opportunities.find((o: any) => o.id === targetOppId);
-  state.opportunities.forEach((o: any) => {
-    if (o.id !== activeOpp?.id && o.status === "recommended") {
-      o.status = "open";
+  // 3. Dynamic Opportunity Re-scoring via Section 50 Attribution Formula
+  let maxScoreDelta = 0;
+  for (const opp of state.opportunities) {
+    const prevScore = opp.score;
+    const isTopicMatch = opp.topic.toLowerCase() === detectedTopic.toLowerCase();
+
+    if (isTopicMatch && relativePerformance >= 1) {
+      const fitBoost = Math.round(7 * Math.min(2.5, relativePerformance - 0.3));
+      opp.historicalFit = Math.min(99, opp.historicalFit + fitBoost);
+      opp.audienceFit = Math.min(99, opp.audienceFit + Math.round(fitBoost * 0.8));
+      opp.novelty = Math.min(95, opp.novelty + Math.round(fitBoost * 0.5));
+      opp.collisionRisk = Math.max(8, Math.round(opp.collisionRisk * 0.6));
+      opp.rationale = `Elevated by Memory v${state.memory.version}: Previous "${detectedTopic}" upload delivered ${body.data.views.toLocaleString()} views (${relativePerformance}× baseline). Validated demand lifts priority.`;
+      opp.signals = [
+        `Validated by Cycle ${state.memory.version - 2} upload (+${relativePerformance}× baseline)`,
+        `Topic confidence elevated to ${topicSignal.confidence}%`,
+        "Strongest compounding growth trajectory in current channel library",
+      ];
+    } else if (isTopicMatch && relativePerformance < 1) {
+      opp.historicalFit = Math.max(40, opp.historicalFit - 4);
+      opp.rationale = `Deprioritized by Memory v${state.memory.version}: Recent upload fell below baseline (${relativePerformance}×). Recommend format pivot.`;
+    }
+
+    // Section 50 Formula: Score = (0.35 × AF) + (0.30 × HF) + (0.25 × Nov) - (0.10 × Col)
+    opp.score = Math.max(10, Math.min(99, Math.round(
+      opp.audienceFit * 0.35 +
+      opp.historicalFit * 0.30 +
+      opp.novelty * 0.25 -
+      opp.collisionRisk * 0.10
+    )));
+
+    if (opp.formulaBreakdown) {
+      opp.formulaBreakdown.formulaString = `Score = (0.35 × ${opp.audienceFit}) + (0.30 × ${opp.historicalFit}) + (0.25 × ${opp.novelty}) - (0.10 × ${opp.collisionRisk}) = ${opp.score}`;
+      if (isTopicMatch) {
+        opp.formulaBreakdown.topicBenchmarkRatio = `${relativePerformance}× measured baseline`;
+        opp.formulaBreakdown.confidenceRationale = `Empirical validation: Memory v${state.memory.version} verified ${topicSignal.confidence}% topic confidence`;
+      }
+    }
+
+    const delta = opp.score - prevScore;
+    if (delta > maxScoreDelta) {
+      maxScoreDelta = delta;
+    }
+  }
+
+  // 4. Dynamic Re-ranking
+  state.opportunities.sort((a: any, b: any) => b.score - a.score);
+
+  // Set highest-ranking opportunity as recommended
+  state.opportunities.forEach((opp: any, idx: number) => {
+    if (idx === 0) {
+      opp.status = "recommended";
+    } else if (opp.status === "recommended") {
+      opp.status = "open";
     }
   });
 
-  state.opportunities.sort((a: any, b: any) => b.score - a.score);
+  state.pulse.recommended = state.opportunities[0];
 
   const learningResult = {
     contentId: body.data.contentId,
@@ -340,12 +363,11 @@ router.post("/measure", async (req, res): Promise<void> => {
       newVersion: state.memory.version,
       topicShift,
       reRankedTopOpportunity: state.opportunities[0].title,
-      scoreDelta: scoreDelta || 5,
+      scoreDelta: maxScoreDelta || 5,
     },
   };
 
   state.measurement = learningResult;
-  state.pulse.recommended = getRecommended(state);
 
   addActivity(state, {
     agent: "Learning Loop",
@@ -666,7 +688,7 @@ function computeTokenJaccard(tokensA: Set<string>, tokensB: Set<string>): { simi
   return { similarity, overlapTokens: intersection };
 }
 
-function calculateQuality(input: any): any {
+export function calculateQuality(input: any): any {
   // 1. Hook/Title strength: optimal 38-68 chars
   const titleLen = input.title.trim().length;
   const titleScore = titleLen >= 38 && titleLen <= 68 ? 96 : titleLen >= 25 && titleLen <= 85 ? 80 : 50;
@@ -773,7 +795,7 @@ function calculateQuality(input: any): any {
   };
 }
 
-async function evaluateIdea(state: any, idea: string): Promise<any> {
+export async function evaluateIdea(state: any, idea: string): Promise<any> {
   const ideaTokens = extractMeaningfulTokens(idea);
   const normalizedIdea = idea.toLowerCase();
 

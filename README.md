@@ -10,7 +10,7 @@ The fastest way to experience the autonomous growth loop is the built-in Golden 
 
 1. **Pulse (`/dashboard`)**: Inspect the 3-minute evaluation stepper and the **Creator Workflow Economy Card** (**8 hours 15 minutes saved** per video / 97% time reduction · illustrative workflow estimate).
 2. **Channel (`/channel`)**: Review baseline stats across 42 catalog videos.
-3. **Decide (`/opportunities`)**: Click **"Why this score? ▼"** on any card to view the exact mathematical attribution formula (`Score = 0.35×Fit + 0.30×Hist + 0.20×Nov - 0.15×Collision`).
+3. **Decide (`/opportunities`)**: Click **"Why this score? ▼"** on any card to view the exact mathematical attribution formula (`Score = 0.35×Fit + 0.30×Hist + 0.25×Nov - 0.10×Collision`).
 4. **Before I Publish (`/before-publish`)**: Run real **Gemini dense vector cosine embeddings** across the 42-video catalog to detect cannibalization before shooting.
 5. **Content Factory (`/opportunities/:id`)**: Pick a voice profile (*Thoughtful Technical*, *High-Velocity Builder*, *First-Principles*), generate the full package, and export as clean Markdown.
 6. **QA Gate (`/qa`)**: Run the 7 deterministic validation checks (no LLM hallucinated passes).
