@@ -30,7 +30,7 @@
   > *Meet CreatorPulse — the first closed-loop operating system for serious creators. Instead of guessing, CreatorPulse turns channel performance into defensible strategy, carries it from idea to publish, and compounds intelligence with every single video."*
 * **Visual Action**:
   - Show the **Judge Golden Path Stepper** at the top of `/dashboard`.
-  - Highlight the **Creator Workflow Economy Card**: **8 hours 15 minutes saved** per video (a 97% reduction from 8.5 hours to 15 minutes).
+  - Highlight the **Creator Workflow Economy Card**: **8 hours 15 minutes saved** per video (a 97% reduction from 8.5 hours to 15 minutes, presented as an illustrative workflow estimate).
 
 ---
 

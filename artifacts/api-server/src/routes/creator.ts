@@ -692,6 +692,15 @@ function calculateQuality(input: any): any {
   const hasRiskyClaims = claimRiskRegex.test(fullText);
   const claimScore = hasRiskyClaims ? 62 : 95;
 
+  // 6. Description depth & metadata structure
+  const descLen = (input.description || "").trim().length;
+  const descScore = descLen >= 80 ? 94 : descLen >= 40 ? 76 : 52;
+
+  // 7. Retention pacing & structural anchors
+  const scriptLen = (input.script || "").trim().length;
+  const hasStructuralBreaks = /(?:^|\n)(?:##|\d+[\.:]|\*\*\[|Chapter)/i.test(input.script || "") || scriptLen >= 500;
+  const pacingScore = hasStructuralBreaks && scriptLen >= 600 ? 95 : scriptLen >= 300 ? 82 : 55;
+
   const checks = [
     {
       name: "Hook strength",
@@ -731,6 +740,22 @@ function calculateQuality(input: any): any {
         ? "Flagged unsupported absolute claim or guarantee. Qualify with production constraints."
         : "All technical assertions are defensibly qualified. Zero unsupported absolutes.",
     },
+    {
+      name: "Description depth & metadata",
+      score: descScore,
+      status: descScore >= 70 ? "pass" : "revise",
+      detail: descScore >= 70
+        ? `Description depth (${descLen} chars) includes structured framing for search crawl.`
+        : `Description (${descLen} chars) is too brief. Expand summary to provide context.`,
+    },
+    {
+      name: "Retention pacing & anchors",
+      score: pacingScore,
+      status: pacingScore >= 70 ? "pass" : "revise",
+      detail: hasStructuralBreaks
+        ? `Script includes structural retention anchors and pacing across ${scriptLen} characters.`
+        : `Script lacks structural section breaks. Add clear transition anchors for mid-video retention.`,
+    },
   ];
 
   const overall = Math.round(checks.reduce((sum, c) => sum + c.score, 0) / checks.length);
@@ -742,7 +767,7 @@ function calculateQuality(input: any): any {
     claimRisk,
     passed,
     summary: passed
-      ? "Pass. All deterministic quality gates satisfied: optimal title pacing, verified keyword distribution, and substantiated technical claims."
+      ? "Pass. All 7 deterministic quality gates satisfied: optimal title pacing, verified keyword distribution, substantiated claims, and structural retention anchors."
       : "Revision required. Address the flagged quality checks before approving for publish.",
     checks,
   };

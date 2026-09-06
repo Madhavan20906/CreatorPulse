@@ -8,7 +8,7 @@ CreatorPulse turns a creator's content history and performance signals into an e
 
 The fastest way to experience the autonomous growth loop is the built-in Golden Path (see detailed script in [`docs/demo-script.md`](docs/demo-script.md)):
 
-1. **Pulse (`/dashboard`)**: Inspect the 3-minute evaluation stepper and the **Creator Workflow Economy Card** (**8 hours 15 minutes saved** per video / 97% time reduction).
+1. **Pulse (`/dashboard`)**: Inspect the 3-minute evaluation stepper and the **Creator Workflow Economy Card** (**8 hours 15 minutes saved** per video / 97% time reduction · illustrative workflow estimate).
 2. **Channel (`/channel`)**: Review baseline stats across 42 catalog videos.
 3. **Decide (`/opportunities`)**: Click **"Why this score? ▼"** on any card to view the exact mathematical attribution formula (`Score = 0.35×Fit + 0.30×Hist + 0.20×Nov - 0.15×Collision`).
 4. **Before I Publish (`/before-publish`)**: Run real **Gemini dense vector cosine embeddings** across the 42-video catalog to detect cannibalization before shooting.
@@ -24,7 +24,7 @@ The fastest way to experience the autonomous growth loop is the built-in Golden 
 - **Explainable Attribution Math**: Section 50 formula transparency gives creators traceable justifications for every recommendation.
 - **Deterministic 7-Rule Quality Gate**: Code-level validation catches retention flaws and collision risks before publishing.
 - **Multi-Cycle Compounding Memory**: A genuine closed feedback loop where measured performance dynamically updates creator knowledge and alters future rankings.
-- **Creator Workflow Economy (Section 57/58)**: Quantified 97% time reduction (8.5 hours manual down to 15 minutes autonomous).
+- **Creator Workflow Economy (Section 57/58)**: Quantified 97% time reduction (8.5 hours manual down to 15 minutes autonomous · illustrative workflow estimate).
 
 ## Architecture
 
