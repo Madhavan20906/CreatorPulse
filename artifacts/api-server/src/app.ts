@@ -1,3 +1,5 @@
+import path from "path";
+import fs from "fs";
 import express, { type Express } from "express";
 import cors from "cors";
 import pinoHttp from "pino-http";
@@ -30,5 +32,17 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 app.use("/api", router);
+
+// Serve built frontend SPA if available
+const staticDir = path.resolve(import.meta.dirname, "../../creatorpulse/dist/public");
+if (fs.existsSync(staticDir)) {
+  app.use(express.static(staticDir));
+  app.use((req, res, next) => {
+    if (req.method === "GET" && !req.path.startsWith("/api")) {
+      return res.sendFile(path.join(staticDir, "index.html"));
+    }
+    next();
+  });
+}
 
 export default app;
