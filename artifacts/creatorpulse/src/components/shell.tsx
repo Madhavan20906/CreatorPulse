@@ -1,4 +1,4 @@
-import { Bell, ChevronRight, CircleHelp, Command, LayoutDashboard, Lightbulb, Library, LineChart, Menu, Plus, Search, Settings, ShieldCheck, Sparkles, Target, X } from 'lucide-react';
+import { Activity, Bell, ChevronRight, CircleHelp, Command, LayoutDashboard, Lightbulb, Library, LineChart, Menu, Plus, Search, Settings, ShieldCheck, Sparkles, Target, X } from 'lucide-react';
 import { useState } from 'react';
 import { Link, useLocation } from 'wouter';
 
@@ -12,6 +12,7 @@ const nav = [
   { href: '/calendar', label: 'Calendar', icon: Library },
   { href: '/analytics', label: 'Analytics', icon: LineChart },
   { href: '/memory', label: 'Memory', icon: Lightbulb },
+  { href: '/activity', label: 'Agent activity', icon: Activity },
 ];
 
 export function Logo({ dark = false }: { dark?: boolean }) {

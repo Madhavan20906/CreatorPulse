@@ -6,7 +6,7 @@ import { TooltipProvider } from '@/components/ui/tooltip';
 import NotFound from '@/pages/not-found';
 import { Route, Switch, useLocation, Router as WouterRouter } from 'wouter';
 import { ErrorBoundary } from '@/components/error-boundary';
-import { Analytics, BeforePublish, CalendarPage, Channel, ContentDetail, Create, Dashboard, Landing, Memory, Onboarding, OpportunityDetail, Opportunities, QA, SettingsPage, Shorts } from '@/pages/pages';
+import { ActivityPage, Analytics, BeforePublish, CalendarPage, Channel, ContentDetail, Create, Dashboard, Landing, Memory, Onboarding, OpportunityDetail, Opportunities, QA, SettingsPage, Shorts } from '@/pages/pages';
 
 const queryClient = new QueryClient();
 
@@ -32,6 +32,7 @@ function Router() {
     <Route path="/calendar" component={CalendarPage}/>
     <Route path="/analytics" component={Analytics}/>
     <Route path="/memory" component={Memory}/>
+    <Route path="/activity" component={ActivityPage}/>
     <Route path="/settings" component={SettingsPage}/>
     <Route path="/before-publish" component={BeforePublish}/>
     <Route component={NotFound}/>
