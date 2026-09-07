@@ -32,6 +32,39 @@ const scoreTone = (n: number) => n >= 80 ? 'text-[#72920f]' : n >= 60 ? 'text-[#
 const getLastContentId = () => typeof window === 'undefined' ? 'demo-content' : window.localStorage.getItem('creatorpulse:lastContentId') || 'demo-content';
 const activityTime = (timestamp: string) => timestamp.includes('ago') || timestamp === 'Just now' ? timestamp : new Date(timestamp).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 
+const getWeeklyPulseDate = () => {
+  const now = new Date();
+  const dayName = now.toLocaleDateString(undefined, { weekday: 'long' });
+  const monthName = now.toLocaleDateString(undefined, { month: 'long' });
+  const dayNum = now.getDate();
+  return `${dayName}, ${monthName} ${dayNum} / Weekly pulse`;
+};
+
+const get30DayWindowDates = () => {
+  const now = new Date();
+  const past30 = new Date(now.getTime() - 28 * 24 * 60 * 60 * 1000);
+  const fmt = (d: Date) => d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }).toUpperCase();
+  return { start: fmt(past30), end: fmt(now) };
+};
+
+const getDynamicWeekDays = () => {
+  const now = new Date();
+  const currentDayOfWeek = (now.getDay() + 6) % 7; // Monday = 0, Sunday = 6
+  const monday = new Date(now);
+  monday.setDate(now.getDate() - currentDayOfWeek);
+  
+  return ['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((letter, i) => {
+    const d = new Date(monday);
+    d.setDate(monday.getDate() + i);
+    return {
+      letter,
+      dayNum: d.getDate(),
+      isToday: d.toDateString() === now.toDateString(),
+      dateObj: d,
+    };
+  });
+};
+
 const copyToClipboard = async (text: string, label = 'Content') => {
   try {
     await navigator.clipboard.writeText(text);
@@ -299,7 +332,7 @@ export function Dashboard() {
 
         <div className="mb-7 flex flex-col justify-between gap-4 md:flex-row md:items-end">
           <div>
-            <div className="eyebrow">Monday, October 14 / Weekly pulse</div>
+            <div className="eyebrow">{getWeeklyPulseDate()}</div>
             <h2 className="display mt-2 max-w-2xl text-3xl font-bold leading-tight tracking-[-.04em] md:text-5xl">
               {p.headline}
             </h2>
@@ -465,6 +498,8 @@ export function Channel() {
   const [customJson, setCustomJson] = useState('');
   const [parsedFileVideos, setParsedFileVideos] = useState<any[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [selectedVideo, setSelectedVideo] = useState<any | null>(null);
+  const [selectedTopicFilter, setSelectedTopicFilter] = useState<string | null>(null);
 
   if (q.isLoading) return <Shell><LoadingState label="Mapping channel intelligence" /></Shell>;
   if (q.isError || !q.data) return <Shell><ErrorState onRetry={() => q.refetch()} /></Shell>;
@@ -660,24 +695,51 @@ export function Channel() {
 
       <div className="mt-5 grid gap-5 lg:grid-cols-[.8fr_1.2fr]">
         <div className="panel p-6">
-          <div className="eyebrow">Topic performance</div>
-          <h3 className="display mt-2 text-xl font-bold">What earns attention</h3>
-          <div className="mt-5 space-y-5">
-            {c.topics?.map((t) => (
-              <div key={t.name} data-testid={`topic-${t.name}`}>
-                <div className="flex justify-between text-sm font-bold">
-                  <span>{t.name}</span>
-                  <span className={scoreTone(t.audienceFit)}>{t.performance}</span>
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="eyebrow">Topic performance</div>
+              <h3 className="display mt-2 text-xl font-bold">What earns attention</h3>
+            </div>
+            {selectedTopicFilter && (
+              <button
+                onClick={() => setSelectedTopicFilter(null)}
+                className="mono text-[10px] font-bold text-primary hover:underline"
+              >
+                Clear filter ×
+              </button>
+            )}
+          </div>
+          <div className="mt-5 space-y-4">
+            {c.topics?.map((t) => {
+              const isSelected = selectedTopicFilter === t.name;
+              return (
+                <div
+                  key={t.name}
+                  onClick={() => setSelectedTopicFilter(isSelected ? null : t.name)}
+                  className={`cursor-pointer rounded-xl p-3 transition-all border ${
+                    isSelected
+                      ? 'border-primary bg-primary/10 shadow-sm'
+                      : 'border-transparent hover:border-border hover:bg-secondary/50'
+                  }`}
+                  data-testid={`topic-${t.name}`}
+                >
+                  <div className="flex justify-between text-sm font-bold">
+                    <span className="flex items-center gap-1.5">
+                      {t.name}
+                      {isSelected && <span className="mono text-[10px] text-primary">● (Active filter)</span>}
+                    </span>
+                    <span className={scoreTone(t.audienceFit)}>{t.performance}</span>
+                  </div>
+                  <div className="mt-2">
+                    <Meter value={t.audienceFit} />
+                  </div>
+                  <div className="mt-1 flex justify-between mono text-[9px] text-muted-foreground">
+                    <span>{money(t.views)} views</span>
+                    <span>{t.saturation}% saturated</span>
+                  </div>
                 </div>
-                <div className="mt-2">
-                  <Meter value={t.audienceFit} />
-                </div>
-                <div className="mt-1 flex justify-between mono text-[9px] text-muted-foreground">
-                  <span>{money(t.views)} views</span>
-                  <span>{t.saturation}% saturated</span>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
 
@@ -685,33 +747,54 @@ export function Channel() {
           <div className="flex items-center justify-between p-6 pb-4">
             <div>
               <div className="eyebrow">Video library</div>
-              <h3 className="display mt-2 text-xl font-bold">Recent work, in context</h3>
+              <h3 className="display mt-2 text-xl font-bold">
+                {selectedTopicFilter ? `Topic: ${selectedTopicFilter}` : 'Recent work, in context'}
+              </h3>
             </div>
-            <span className="mono text-[10px] text-muted-foreground">{c.videos?.length || 0} analyzed</span>
+            <div className="flex items-center gap-2">
+              {selectedTopicFilter && (
+                <button
+                  onClick={() => setSelectedTopicFilter(null)}
+                  className="rounded-full bg-secondary px-2.5 py-0.5 mono text-[10px] font-semibold text-muted-foreground hover:text-foreground"
+                >
+                  Reset filter
+                </button>
+              )}
+              <span className="mono text-[10px] text-muted-foreground">
+                {(c.videos?.filter(v => !selectedTopicFilter || v.topic === selectedTopicFilter) || []).length} of {c.videos?.length || 0} analyzed
+              </span>
+            </div>
           </div>
           <div className="divide-y divide-border/70 max-h-[500px] overflow-y-auto">
-            {c.videos?.map((v) => (
-              <div className="flex items-center gap-4 px-6 py-4" key={v.id} data-testid={`video-row-${v.id}`}>
-                <div className="grid h-10 w-14 shrink-0 place-items-center rounded-lg bg-[#20243b] text-[#d8f66a]">
-                  <Play size={14} />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-sm font-bold">{v.title}</div>
-                  <div className="mt-1 flex gap-2 mono text-[9px] text-muted-foreground">
-                    <span>{v.topic}</span>
-                    <span>·</span>
-                    <span>{v.format}</span>
-                    <span>·</span>
-                    <span>{v.publishedAt}</span>
+            {c.videos
+              ?.filter((v) => !selectedTopicFilter || v.topic === selectedTopicFilter)
+              .map((v) => (
+                <div
+                  className="group flex items-center gap-4 px-6 py-4 cursor-pointer hover:bg-secondary/60 transition-colors"
+                  key={v.id}
+                  data-testid={`video-row-${v.id}`}
+                  onClick={() => setSelectedVideo(v)}
+                >
+                  <div className="grid h-10 w-14 shrink-0 place-items-center rounded-lg bg-[#20243b] text-[#d8f66a] group-hover:scale-105 transition-transform">
+                    <Play size={14} />
                   </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-sm font-bold group-hover:text-primary transition-colors">{v.title}</div>
+                    <div className="mt-1 flex gap-2 mono text-[9px] text-muted-foreground">
+                      <span className="font-semibold text-foreground/80">{v.topic}</span>
+                      <span>·</span>
+                      <span>{v.format}</span>
+                      <span>·</span>
+                      <span>{v.publishedAt}</span>
+                    </div>
+                  </div>
+                  <div className="hidden text-right sm:block">
+                    <div className="mono text-xs font-bold">{money(v.views)}</div>
+                    <div className="mono mt-1 text-[9px] text-[#72920f]">{v.engagementRate}% ER</div>
+                  </div>
+                  <ChevronRight className="text-muted-foreground transition-transform group-hover:translate-x-1 group-hover:text-primary" size={16} />
                 </div>
-                <div className="hidden text-right sm:block">
-                  <div className="mono text-xs font-bold">{money(v.views)}</div>
-                  <div className="mono mt-1 text-[9px] text-[#72920f]">{v.engagementRate}% ER</div>
-                </div>
-                <ChevronRight className="text-muted-foreground" size={15} />
-              </div>
-            ))}
+              ))}
           </div>
         </div>
       </div>
@@ -881,6 +964,81 @@ export function Channel() {
                 </div>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Video Detail Modal */}
+      {selectedVideo && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+          onClick={() => setSelectedVideo(null)}
+        >
+          <div
+            className="w-full max-w-xl rounded-2xl border border-border bg-card p-6 shadow-2xl animate-enter"
+            onClick={(e) => e.stopPropagation()}
+            data-testid="modal-video-detail"
+          >
+            <div className="flex items-start justify-between border-b border-border/70 pb-4">
+              <div className="min-w-0 pr-4">
+                <div className="flex items-center gap-2 mono text-[10px] text-muted-foreground">
+                  <span className="rounded bg-secondary px-2 py-0.5 font-bold text-foreground">{selectedVideo.topic}</span>
+                  <span>·</span>
+                  <span>{selectedVideo.format}</span>
+                  <span>·</span>
+                  <span>{selectedVideo.publishedAt}</span>
+                </div>
+                <h3 className="display mt-2 text-xl font-bold leading-snug">{selectedVideo.title}</h3>
+              </div>
+              <button
+                onClick={() => setSelectedVideo(null)}
+                className="rounded-lg p-1 text-muted-foreground hover:text-foreground shrink-0"
+                data-testid="button-close-video-modal"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="mt-5 grid grid-cols-3 gap-3">
+              <div className="rounded-xl bg-secondary/70 p-3">
+                <div className="eyebrow">Views</div>
+                <div className="mt-1 display text-xl font-bold">{money(selectedVideo.views)}</div>
+              </div>
+              <div className="rounded-xl bg-secondary/70 p-3">
+                <div className="eyebrow">Engagement</div>
+                <div className="mt-1 display text-xl font-bold text-[#72920f]">{selectedVideo.engagementRate}%</div>
+              </div>
+              <div className="rounded-xl bg-secondary/70 p-3">
+                <div className="eyebrow">Duration</div>
+                <div className="mt-1 mono text-base font-bold">{selectedVideo.duration || '12:45'}</div>
+              </div>
+            </div>
+
+            <div className="mt-5 rounded-xl border border-border/80 bg-background/50 p-4">
+              <div className="eyebrow !text-primary flex items-center gap-1.5">
+                <Sparkles size={12} /> Opening Hook & Narrative Angle
+              </div>
+              <p className="mt-2 text-xs italic leading-relaxed text-muted-foreground">
+                "{selectedVideo.hook || selectedVideo.title}"
+              </p>
+            </div>
+
+            <div className="mt-6 flex flex-col sm:flex-row items-center justify-end gap-2.5 border-t border-border/70 pt-4">
+              <Link
+                href={`/before-publish?idea=${encodeURIComponent(`Counterfactual test: Remaking "${selectedVideo.title}"`)}`}
+                className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 rounded-xl border border-border bg-card px-4 py-2.5 text-xs font-bold text-foreground hover:bg-secondary transition-colors"
+                data-testid="button-test-remake"
+              >
+                <CircleAlert size={14} className="text-[#f28b67]" /> Pressure-test remake
+              </Link>
+              <Link
+                href="/create"
+                className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 rounded-xl bg-primary px-4 py-2.5 text-xs font-bold text-primary-foreground shadow-sm transition-opacity hover:opacity-90"
+                data-testid="button-factory-from-video"
+              >
+                <Wand2 size={14} /> Open Content Factory
+              </Link>
+            </div>
           </div>
         </div>
       )}
@@ -1750,15 +1908,18 @@ export function CalendarPage() {
         <div className="panel p-6">
           <div className="eyebrow">This week</div>
           <div className="mt-5 grid grid-cols-7 gap-1">
-            {['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((d, i) => (
-              <div className="text-center" key={`${d}${i}`}>
-                <div className="mono text-[9px] text-muted-foreground">{d}</div>
+            {getDynamicWeekDays().map((item, i) => (
+              <div className="text-center" key={`${item.letter}${i}`}>
+                <div className="mono text-[9px] text-muted-foreground">{item.letter}</div>
                 <div
-                  className={`mx-auto mt-2 grid h-9 w-9 place-items-center rounded-xl text-xs font-bold ${
-                    i === 1 ? 'bg-primary text-primary-foreground' : ''
+                  className={`mx-auto mt-2 grid h-9 w-9 place-items-center rounded-xl text-xs font-bold transition-transform hover:scale-105 ${
+                    item.isToday
+                      ? 'bg-primary text-primary-foreground shadow-sm ring-2 ring-primary/30'
+                      : 'hover:bg-secondary'
                   }`}
+                  title={item.dateObj.toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' })}
                 >
-                  {14 + i}
+                  {item.dayNum}
                 </div>
               </div>
             ))}
@@ -1785,22 +1946,34 @@ export function CalendarPage() {
             </span>
           </div>
           <div className="divide-y divide-border/70">
-            {items.map((s) => (
-              <div className="flex items-center gap-4 p-5" key={s.id || s.title} data-testid={`calendar-item-${s.title}`}>
-                <div className="w-20 shrink-0">
-                  <div className="mono text-[10px] text-muted-foreground">{s.day}</div>
-                  <div className="mono mt-1 text-xs font-bold">{s.time}</div>
-                </div>
-                <div className="h-10 w-1 rounded-full bg-[#d8f66a]" />
-                <div className="flex-1">
-                  <div className="text-sm font-bold">{s.title}</div>
-                  <div className="mt-1 mono text-[9px] text-muted-foreground">
-                    {s.type} · <span className={s.status === 'Approved' ? 'font-bold text-[#72920f]' : ''}>{s.status}</span>
+            {items.map((s) => {
+              const contentTargetId = s.id ? (s.id.startsWith('slot-') || s.id === '1' || s.id === '2' || s.id === '3' ? getLastContentId() : s.id) : getLastContentId();
+              return (
+                <Link
+                  href={`/content/${contentTargetId}`}
+                  className="group flex items-center gap-4 p-5 transition-colors hover:bg-secondary/60 cursor-pointer"
+                  key={s.id || s.title}
+                  data-testid={`calendar-item-${s.title}`}
+                >
+                  <div className="w-20 shrink-0">
+                    <div className="mono text-[10px] text-muted-foreground">{s.day}</div>
+                    <div className="mono mt-1 text-xs font-bold">{s.time}</div>
                   </div>
-                </div>
-                <ChevronRight size={16} className="text-muted-foreground" />
-              </div>
-            ))}
+                  <div className="h-10 w-1 rounded-full bg-[#d8f66a] transition-all group-hover:h-12 group-hover:bg-primary" />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-bold group-hover:text-primary transition-colors truncate">{s.title}</div>
+                    <div className="mt-1 mono text-[9px] text-muted-foreground flex items-center gap-2">
+                      <span>{s.type}</span>
+                      <span>·</span>
+                      <span className={s.status === 'Approved' ? 'font-bold text-[#72920f]' : ''}>{s.status}</span>
+                      <span>·</span>
+                      <span className="text-primary font-medium group-hover:underline">Open package</span>
+                    </div>
+                  </div>
+                  <ChevronRight size={16} className="text-muted-foreground transition-transform group-hover:translate-x-1 group-hover:text-primary" />
+                </Link>
+              );
+            })}
           </div>
         </div>
       </div>
@@ -1974,8 +2147,15 @@ export function Analytics() {
                 strokeWidth="2"
               />
             </svg>
-            <div className="absolute -bottom-6 left-0 mono text-[9px] text-muted-foreground">SEP 16</div>
-            <div className="absolute -bottom-6 right-0 mono text-[9px] text-muted-foreground">OCT 14</div>
+            {(() => {
+              const windowDates = get30DayWindowDates();
+              return (
+                <>
+                  <div className="absolute -bottom-6 left-0 mono text-[9px] text-muted-foreground">{windowDates.start}</div>
+                  <div className="absolute -bottom-6 right-0 mono text-[9px] text-muted-foreground">{windowDates.end}</div>
+                </>
+              );
+            })()}
           </div>
           <div className="mt-10 flex gap-5 mono text-[9px] text-muted-foreground">
             <span>
@@ -2379,8 +2559,26 @@ export function SettingsPage() {
 
 export function BeforePublish() {
   const evaluate = useEvaluateIdea();
-  const [idea, setIdea] = useState('Why productive creators are building slower systems');
+  const [idea, setIdea] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const urlParams = new URLSearchParams(window.location.search);
+      const q = urlParams.get('idea');
+      if (q) return decodeURIComponent(q);
+    }
+    return 'Why productive creators are building slower systems';
+  });
   const [result, setResult] = useState<ReturnType<typeof useEvaluateIdea>['data']>(undefined);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const urlParams = new URLSearchParams(window.location.search);
+      const q = urlParams.get('idea');
+      if (q && q !== idea) {
+        setIdea(decodeURIComponent(q));
+      }
+    }
+  }, []);
+
   const submit = (e: FormEvent) => { e.preventDefault(); evaluate.mutate({ data: { idea } }, { onSuccess: setResult }); };
   return <Shell eyebrow="Decision support" title="Before I publish"><div className="grid gap-8 lg:grid-cols-[.8fr_1.2fr] lg:items-start"><div><div className="eyebrow">Counterfactual evaluator</div><h2 className="display mt-3 text-4xl font-bold leading-[.98] tracking-[-.05em] md:text-6xl">Don’t guess. Pressure-test it.</h2><p className="mt-5 text-sm leading-6 text-muted-foreground">Put the idea in the room. We’ll compare it to your audience, your history, and the videos you’ve already made.</p><form onSubmit={submit} className="mt-8"><label className="eyebrow">Your idea</label><textarea value={idea} onChange={(e) => setIdea(e.target.value)} rows={6} className="mt-2 w-full resize-none rounded-2xl border border-input bg-card p-4 text-sm leading-6 outline-none focus:border-primary" data-testid="input-evaluate-idea"/><Button disabled={!idea.trim() || evaluate.isPending} variant="coral" testId="button-evaluate-idea">{evaluate.isPending ? 'Thinking…' : 'Evaluate this idea'} <Sparkles size={14}/></Button></form></div><div>{result ? <div className="panel p-6 md:p-8" data-testid="evaluation-result"><div className="flex items-start justify-between"><div><div className="eyebrow">Recommendation</div><h3 className="display mt-2 text-3xl font-bold">{result.recommendation}</h3></div><div className={`display text-5xl font-bold ${scoreTone(result.opportunity)}`}>{result.opportunity}</div></div><p className="mt-6 text-sm leading-7 text-muted-foreground">{result.explanation}</p><div className="mt-7 grid grid-cols-2 gap-4 md:grid-cols-4">{[['Audience fit',result.audienceFit],['Novelty',result.novelty],['Historical fit',result.historicalFit],['Collision risk',result.collisionRisk]].map(([label,val]) => <div key={label as string} className="rounded-xl bg-secondary p-3"><div className="eyebrow">{label as string}</div><div className="mt-2 display text-2xl font-bold">{val as number}</div><Meter value={val as number} color={label === 'Collision risk' ? 'coral' : 'lime'}/></div>)}</div><div className="mt-7 rounded-xl border-l-2 border-[#d8f66a] bg-[#edf3c9] p-4"><div className="eyebrow !text-[#72920f]">Suggested alternative</div><div className="mt-2 text-sm font-bold text-[#39450e]">{result.suggestedAlternative}</div></div><div className="mt-7"><div className="eyebrow">Similar videos</div><div className="mt-3 space-y-2">{result.similarVideos?.map((v) => <div className="flex justify-between rounded-lg border border-border p-3 text-xs" key={v.videoTitle}><span>{v.videoTitle}</span><span className="mono text-muted-foreground">{v.similarity}% similar</span></div>)}</div></div></div> : <div className="panel flex min-h-[440px] flex-col justify-between bg-[#20243b] p-7 text-[#f2eedf]"><div><div className="eyebrow !text-[#a0a2b0]">How it thinks</div><div className="mt-7 space-y-6">{[['01','Audience fit','Does this solve the problem your people actually have?'],['02','Novelty','Have you earned the right to say this in a new way?'],['03','Collision risk','Will it compete with something you already made?']].map(([n,t,d]) => <div className="flex gap-4" key={n}><span className="mono text-[10px] text-[#d8f66a]">{n}</span><div><div className="font-bold">{t}</div><div className="mt-1 text-xs leading-5 text-[#a7a8b4]">{d}</div></div></div>)}</div></div><div className="border-t border-[#484b62] pt-5 mono text-[10px] uppercase tracking-wider text-[#8b8d9a]">A good idea survives contact with context.</div></div>}</div></div></Shell>;
 }
