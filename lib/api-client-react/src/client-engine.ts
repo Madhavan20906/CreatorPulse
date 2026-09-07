@@ -308,16 +308,94 @@ export function evaluateIdeaClient(state: ClientCreatorState, idea: string): any
 }
 
 export function buildContentPackageClient(opportunity: any, voice = "Practical, candid, technically rigorous"): any {
-  const cleanTopic = opportunity.topic.toLowerCase();
+  const topic = opportunity.topic || "Core Strategy";
+  const cleanTopic = topic.toLowerCase();
   const id = `content-${opportunity.id}`;
-  const hook = `Most creators talk about ${cleanTopic} like it is a feature. The useful question is what happens when it meets a real production constraint.`;
+
+  const isTechOrAI = /\b(ai|agent|model|mcp|prompt|code|coding|software|developer|python|javascript|typescript|rust|cloud|devops|security|kubernetes)\b/i.test(cleanTopic);
+  const isTravel = /\b(travel|amsterdam|city|trip|flight|hotel|vlog|tour|walk|backpack|adventure|explore|guide)\b/i.test(cleanTopic);
+  const isGaming = /\b(game|gaming|playthrough|gameplay|fps|roblox|minecraft|steam|console)\b/i.test(cleanTopic);
+  const isFitness = /\b(fitness|workout|gym|exercise|diet|muscle|training|health)\b/i.test(cleanTopic);
+  const isFinance = /\b(finance|money|invest|wealth|stock|crypto|budget|passive)\b/i.test(cleanTopic);
+
+  let hook = `Most creators talk about ${cleanTopic} like it is trivial. The reality is very different once you face real-world constraints.`;
+  let scriptBody = `In this video, we will break down ${opportunity.title.toLowerCase()} with actionable insights, honest lessons, and a practical checklist.`;
+  let cta = `If this breakdown helped you, subscribe for more in-depth ${topic} guides.`;
+  let desc = `A practical breakdown of ${opportunity.title.toLowerCase()}, covering real-world constraints, common mistakes to avoid, and a complete checklist for ${topic}.`;
+  let primaryKeyword = `${topic} guide`;
+  let secondaryKeywords = [`${topic} breakdown`, `how to master ${topic}`, `${topic} tips 2026`, `${topic} tutorial`];
+  let tags = [topic, "Creator Guide", "Tutorial", "Deep Dive", "2026 Strategy"];
+  let thumbText = `${topic.toUpperCase()}: THE TRUTH`;
+
+  let short1Title = `The biggest mistake with ${topic}`;
+  let short1Hook = `Most people get ${cleanTopic} completely wrong on their first try.`;
+  let short1Script = `They copy what everyone else is doing without understanding the fundamentals. Focus on the core principles first, not the hype.`;
+  let short1Hashtags = [`#${topic.replace(/[^a-zA-Z0-9]/g, "")}`, "#Tips", "#CreatorGuide"];
+
+  let short2Title = `The test you need to run`;
+  let short2Hook = `Before you invest time into ${cleanTopic}, ask yourself this one question.`;
+  let short2Script = `Is this approach sustainable, or are you just burning energy on things that don't move the needle? Simplify your process.`;
+  let short2Hashtags = [`#${topic.replace(/[^a-zA-Z0-9]/g, "")}`, "#Strategy", "#Growth"];
+
+  let short3Title = `Stop overcomplicating ${topic}`;
+  let short3Hook = `More tools will not fix an unclear strategy.`;
+  let short3Script = `When things feel overwhelming in ${cleanTopic}, strip away the noise. A smaller, focused approach always beats a bloated routine.`;
+  let short3Hashtags = [`#${topic.replace(/[^a-zA-Z0-9]/g, "")}`, "#Productivity", "#Focus"];
+
+  if (isTravel) {
+    hook = `Most travel guides give you the tourist trap version of ${cleanTopic}. Here is the honest on-the-ground reality and budget breakdown.`;
+    scriptBody = `In this guide, we explore ${opportunity.title.toLowerCase()} from local transport and budget hacks to hidden spots you cannot afford to miss.\n\nFirst, we break down local logistics and timing. Then, we calculate realistic daily costs. Finally, we map an itinerary that avoids crowded lines.`;
+    cta = `If this helped you plan your trip, subscribe for unfiltered city guides and travel itineraries.`;
+    desc = `An authentic, on-the-ground travel guide to ${opportunity.title.toLowerCase()}, with real budget figures, neighborhood walkthroughs, transport hacks, and mistakes to avoid.`;
+    primaryKeyword = `${topic} travel guide`;
+    secondaryKeywords = [`${topic} itinerary`, `${topic} budget`, "travel vlog 2026", "travel tips"];
+    tags = [topic, "Travel Vlog", "City Guide", "Europe Travel", "Travel Tips"];
+    thumbText = "AVOID THIS MISTAKE";
+    short1Title = `Don't make this mistake in ${topic}`;
+    short1Hook = `If you're visiting ${cleanTopic}, never buy tickets on arrival.`;
+    short1Script = `Book the early slot online. You will save 2 hours of queuing and experience the streets before the crowds arrive.`;
+    short1Hashtags = [`#${topic.replace(/[^a-zA-Z0-9]/g, "")}`, "#TravelTips", "#Wanderlust"];
+    short2Title = `Real daily budget for ${topic}`;
+    short2Hook = `How much does a trip to ${cleanTopic} actually cost?`;
+    short2Script = `Between transport, food, and stays, expect €80 to €140 a day if you avoid tourist hotspots and use local transit passes.`;
+    short2Hashtags = [`#${topic.replace(/[^a-zA-Z0-9]/g, "")}`, "#BudgetTravel", "#CityTrip"];
+  } else if (isTechOrAI) {
+    hook = `Most creators talk about ${cleanTopic} like it is a feature. The useful question is what happens when it meets a real production constraint.`;
+    scriptBody = `In this video, we will pressure-test ${opportunity.title.toLowerCase()} using a practical example from system architecture, developer workflows, and state management.\n\nFirst, we will name the failure mode. Then we will trace the decision that caused it. Finally, we will build a small fix that you can reuse in your own stack.`;
+    cta = `If this saved you a debugging session, subscribe for practical software engineering breakdowns.`;
+    desc = `A practical breakdown of ${opportunity.title.toLowerCase()}, with a concrete failure mode, a clear fix, and a repeatable checklist for developers building reliable software systems.`;
+    primaryKeyword = `${topic} in production`;
+    secondaryKeywords = [`${topic} reliability`, "system architecture", "debugging tutorial", "developer tools"];
+    tags = [topic, "Software Architecture", "Engineering", "Developer Tools", "Coding"];
+    thumbText = "DEMO ≠ PRODUCTION";
+    short1Title = `Your ${topic} is not failing randomly`;
+    short1Hook = `Your system is probably failing for a boring architectural reason.`;
+    short1Script = `The demo works because the input is clean. Production fails because state, error boundaries, and retries were never designed together. Fix the system.`;
+    short1Hashtags = [`#${topic.replace(/[^a-zA-Z0-9]/g, "")}`, "#Coding", "#SoftwareEngineering"];
+  } else if (isGaming) {
+    hook = `Everyone is playing ${cleanTopic} the standard way, but this hidden strategy gives you an unfair advantage.`;
+    scriptBody = `In this breakdown, we analyze ${opportunity.title.toLowerCase()} by testing loadouts, timings, and meta shifts against top players.`;
+    cta = `Subscribe for high-tier gameplay breakdowns and meta analysis.`;
+    desc = `Complete breakdown of ${opportunity.title.toLowerCase()} with frame data, optimal pathing, and strategic analysis for serious players.`;
+    primaryKeyword = `${topic} gameplay guide`;
+    tags = [topic, "Gaming", "Gameplay", "Walkthrough", "Meta Guide"];
+    thumbText = "THE META CHANGED";
+  } else if (isFitness) {
+    hook = `Most people train ${cleanTopic} for months with zero visible progress because of one form error.`;
+    scriptBody = `In this session, we dissect ${opportunity.title.toLowerCase()} with biomechanics, recovery protocols, and a progressive overload plan.`;
+    cta = `Subscribe for science-backed training and nutrition breakdowns.`;
+    desc = `A science-based guide to ${opportunity.title.toLowerCase()}, focusing on biomechanics, muscle recruitment, and progressive overload.`;
+    primaryKeyword = `${topic} workout guide`;
+    tags = [topic, "Fitness", "Workout", "Hypertrophy", "Health"];
+    thumbText = "STOP DOING THIS";
+  }
+
   const script = [
     hook,
     "",
-    `In this video, we will pressure-test ${opportunity.title.toLowerCase()} using a practical example from AI engineering, developer tools, MCP, and software architecture.`,
-    "First, we will name the failure mode. Then we will trace the decision that caused it. Finally, we will build a small fix that you can reuse in your own stack.",
+    scriptBody,
     "",
-    "The goal is not to chase a magic prompt. It is to build a system that stays useful after the demo ends.",
+    "The goal is not to chase a short-term trend. It is to build a reliable outcome that lasts.",
   ].join("\n");
 
   return {
@@ -326,70 +404,70 @@ export function buildContentPackageClient(opportunity: any, voice = "Practical, 
     title: opportunity.title,
     hook,
     outline: [
-      "The promise vs. the production reality",
-      `A concrete ${cleanTopic} failure mode`,
-      "The smallest reliable fix",
-      "A repeatable checklist for your next build",
+      "The promise vs. the reality",
+      `A concrete ${cleanTopic} failure mode to avoid`,
+      "The optimal step-by-step approach",
+      "A repeatable checklist for your next run",
     ],
     script: `${script}\n\nVoice direction: ${voice}.`,
-    chapters: ["00:00 The uncomfortable truth", "02:10 The failure mode", "06:40 The fix", "10:30 The checklist"],
-    cta: "If this saved you a debugging session, subscribe for practical AI engineering breakdowns.",
-    description: `A practical breakdown of ${opportunity.title.toLowerCase()}, with a concrete failure mode, a clear fix, and a repeatable checklist for developers building AI engineering systems and developer tools with MCP and sound software architecture.`,
+    chapters: ["00:00 The uncomfortable truth", "02:10 Common pitfalls", "06:40 The fix", "10:30 The checklist"],
+    cta,
+    description: desc,
     shorts: [
       {
         id: `${id}-short-1`,
-        title: "Your AI agent is not failing randomly",
-        hook: "Your AI agent is probably failing for a boring reason.",
-        script: "The demo works because the context is clean. Production fails because state, tools, and retries are not designed together. Fix the system, not the prompt.",
+        title: short1Title,
+        hook: short1Hook,
+        script: short1Script,
         score: 93,
         duration: "0:42",
         sourceSegment: "02:10–02:52",
-        caption: "The difference between a clever demo and a reliable AI system is usually architecture.",
-        hashtags: ["#AIAgents", "#DeveloperTools", "#SoftwareEngineering"],
+        caption: `Key takeaway from ${topic}: focus on fundamentals.`,
+        hashtags: short1Hashtags,
       },
       {
         id: `${id}-short-2`,
-        title: "The production test most demos skip",
-        hook: "Before you ship an AI agent, remove the happy path.",
-        script: "Change the input, remove a tool, and make the model retry. If the system cannot explain what it is doing next, you do not have reliability yet.",
+        title: short2Title,
+        hook: short2Hook,
+        script: short2Script,
         score: 89,
         duration: "0:36",
         sourceSegment: "06:40–07:16",
-        caption: "A tiny adversarial test catches more than another perfect demo.",
-        hashtags: ["#AIEngineering", "#MCP", "#BuildInPublic"],
+        caption: `A tiny adjustment makes all the difference in ${topic}.`,
+        hashtags: short2Hashtags,
       },
       {
         id: `${id}-short-3`,
-        title: "Stop adding tools to fix a reasoning problem",
-        hook: "More tools will not fix an unclear decision boundary.",
-        script: "When an agent fails, first ask whether it knows what success looks like. A smaller tool surface with a clear contract often beats a bigger toolbox.",
+        title: short3Title,
+        hook: short3Hook,
+        script: short3Script,
         score: 86,
         duration: "0:39",
         sourceSegment: "09:12–09:51",
-        caption: "The best agent architecture is often the one with fewer, clearer decisions.",
-        hashtags: ["#AI", "#Agents", "#Coding"],
+        caption: `The best approach to ${topic} is usually the simplest.`,
+        hashtags: short3Hashtags,
       },
     ],
     social: {
-      xThread: "Most AI agents do not fail because the model is weak.\n\nThey fail because the demo hid the production constraints.\n\nHere is the checklist I now use before shipping one:",
-      linkedin: "The gap between an impressive AI demo and a reliable production system is rarely one better prompt. It is the architecture around state, tools, retries, and clear decision boundaries.",
-      instagram: "The demo is not the product. The system around it is. Save this checklist for your next AI build.",
+      xThread: `Most people approach ${topic} from the wrong angle.\n\nHere is the exact breakdown and checklist I use to get reliable results:`,
+      linkedin: `The difference between mediocre results and real momentum in ${topic} rarely comes down to luck. It comes down to structured execution and avoiding common traps.`,
+      instagram: `Save this checklist for your next ${topic} session. Strip away the noise and stick to the essentials.`,
     },
     seo: {
-      primaryKeyword: "AI agents in production",
-      secondaryKeywords: ["AI agent reliability", "production AI systems", "MCP architecture", "agent debugging"],
+      primaryKeyword,
+      secondaryKeywords,
       titleVariants: [
-        "Why AI Agents Fail in Production (And the Fix)",
-        "Your AI Agent Works in a Demo. Now What?",
-        "The Production Checklist for AI Agents",
+        `Why Most ${topic} Plans Fail (And What to Do Instead)`,
+        `The Honest Guide to ${topic} in 2026`,
+        `5 Rules for Mastering ${topic}`,
       ],
-      tags: ["AI agents", "AI engineering", "developer tools", "MCP", "software architecture"],
+      tags,
     },
     thumbnail: {
-      concept: "A split-screen showing a perfect green demo path on the left and a red production crash trace on the right.",
-      composition: "Creator face in the center, clean system diagram behind, one bold contrast line.",
-      text: "DEMO ≠ PRODUCTION",
-      emotionalAngle: "Recognition and productive tension",
+      concept: `High contrast split-screen showing a common error on the left and the optimal result on the right.`,
+      composition: "Subject in sharp focus, bold contrasting backdrop, readable 3-word bold overlay text.",
+      text: thumbText,
+      emotionalAngle: "Recognition, urgency, and clear authority",
     },
     status: "draft",
     prediction: opportunity.prediction,
@@ -443,16 +521,33 @@ export function syncIngestedChannelToClientState(channelData: any): any {
   state.settings.name = state.channel.name;
   state.settings.niche = state.channel.niche;
 
-  if (Array.isArray(state.activity)) {
-    state.activity.unshift({
-      id: `act-${Date.now()}`,
+  // Reset and seed activity with authentic channel ingestion actions
+  state.activity = [
+    {
+      id: `act-${Date.now()}-1`,
       agent: "Channel Brain",
       action: "Ingested live channel catalog",
-      detail: `Swapped catalog to ${state.channel.name} (${state.channel.handle}) · ${resolvedVideos.length} public videos analyzed`,
+      detail: `Swapped catalog to ${state.channel.name} (${state.channel.handle}) · ${resolvedVideos.length} public uploads analyzed`,
       timestamp: "Just now",
       status: "complete",
-    });
-  }
+    },
+    {
+      id: `act-${Date.now()}-2`,
+      agent: "Opportunity Agent",
+      action: "Derived content pillars",
+      detail: `Classified ${state.channel.topics?.length || 2} audience pillars for ${state.channel.niche}`,
+      timestamp: "Just now",
+      status: "complete",
+    },
+    {
+      id: `act-${Date.now()}-3`,
+      agent: "Growth Planner",
+      action: "Calibrated growth opportunities",
+      detail: `Selected recommended play: "${state.pulse.recommended?.title || 'Core Opportunity'}"`,
+      timestamp: "Just now",
+      status: "complete",
+    },
+  ];
 
   saveClientState(state);
   return state.channel;

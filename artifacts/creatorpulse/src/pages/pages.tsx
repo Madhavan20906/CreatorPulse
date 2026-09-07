@@ -649,7 +649,20 @@ export function Channel() {
   const [parsedFileVideos, setParsedFileVideos] = useState<any[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [selectedVideo, setSelectedVideo] = useState<any | null>(null);
-  const [selectedTopicFilter, setSelectedTopicFilter] = useState<string | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const handleRefreshAnalysis = async () => {
+    setIsRefreshing(true);
+    try {
+      await queryClient.invalidateQueries();
+      await q.refetch();
+      toast.success('Channel analysis & memory signals refreshed.');
+    } catch {
+      toast.error('Failed to refresh channel data');
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
 
   if (q.isLoading) return <Shell><LoadingState label="Mapping channel intelligence" /></Shell>;
   if (q.isError || !q.data) return <Shell><ErrorState onRetry={() => q.refetch()} /></Shell>;
@@ -848,8 +861,8 @@ export function Channel() {
             <Button variant="secondary" testId="button-open-ingest-intro" onClick={() => setIngestModalOpen(true)}>
               <Upload size={14} /> Swap Channel Catalog
             </Button>
-            <Button variant="secondary" testId="button-refresh-channel" onClick={() => q.refetch()}>
-              <RefreshCw size={14} /> Refresh analysis
+            <Button variant="secondary" testId="button-refresh-channel" onClick={handleRefreshAnalysis} disabled={isRefreshing}>
+              <RefreshCw size={14} className={isRefreshing ? "animate-spin" : ""} /> {isRefreshing ? "Refreshing…" : "Refresh analysis"}
             </Button>
           </div>
         }
@@ -2573,11 +2586,67 @@ export function Analytics() {
 
 export function Memory() {
   const q = useGetMemory();
+  const queryClient = useQueryClient();
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const handleRefreshMemory = async () => {
+    setIsRefreshing(true);
+    try {
+      await queryClient.invalidateQueries();
+      await q.refetch();
+      toast.success('Creator memory state refreshed.');
+    } catch {
+      toast.error('Failed to refresh memory');
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
   if (q.isLoading) return <Shell><LoadingState label="Retrieving creator memory"/></Shell>;
   if (q.isError || !q.data) return <Shell><ErrorState onRetry={() => q.refetch()}/></Shell>;
   const m = q.data;
   const groups = [['Topic memory',m.topicMemory],['Format memory',m.formatMemory],['Hook memory',m.hookMemory],['Timing memory',m.timingMemory]];
-  return <Shell eyebrow="Learn" title="Creator memory"><PageIntro eyebrow={`Persistent intelligence / v${m.version}`} title="What we know about your edge." description="Memory is the connective tissue between what you made and what you make next." action={<Button variant="secondary" testId="button-refresh-memory" onClick={() => q.refetch()}><RefreshCw size={14}/> Refresh memory</Button>}/><div className="grid gap-4 sm:grid-cols-2">{groups.map(([name, signals]) => <div className="panel p-5" key={name as string}><div className="eyebrow">{name as string}</div><div className="mt-4 space-y-4">{(signals as typeof m.topicMemory)?.map((s) => <div key={s.label} data-testid={`memory-signal-${s.label}`}><div className="flex items-center justify-between text-sm font-bold"><span>{s.label}</span><span className="mono text-[10px] text-[#72920f]">{s.confidence}%</span></div><p className="mt-1 text-xs leading-5 text-muted-foreground">{s.signal}</p><div className="mt-2"><Meter value={s.confidence}/></div></div>)}</div></div>)}</div><div className="mt-5 rounded-[18px] bg-[#20243b] p-6 text-[#f2eedf]"><div className="eyebrow !text-[#a0a2b0]">Learnings worth carrying</div><div className="mt-5 grid gap-4 md:grid-cols-3">{m.learnings?.map((l, i) => <div className="border-l border-[#d8f66a] pl-4 text-sm leading-6" key={l} data-testid={`learning-${i}`}>{l}</div>)}</div></div></Shell>;
+  return (
+    <Shell eyebrow="Learn" title="Creator memory">
+      <PageIntro
+        eyebrow={`Persistent intelligence / v${m.version}`}
+        title="What we know about your edge."
+        description="Memory is the connective tissue between what you made and what you make next."
+        action={
+          <Button variant="secondary" testId="button-refresh-memory" onClick={handleRefreshMemory} disabled={isRefreshing}>
+            <RefreshCw size={14} className={isRefreshing ? "animate-spin" : ""} /> {isRefreshing ? "Refreshing…" : "Refresh memory"}
+          </Button>
+        }
+      />
+      <div className="grid gap-4 sm:grid-cols-2">
+        {groups.map(([name, signals]) => (
+          <div className="panel p-5" key={name as string}>
+            <div className="eyebrow">{name as string}</div>
+            <div className="mt-4 space-y-4">
+              {(signals as typeof m.topicMemory)?.map((s) => (
+                <div key={s.label} data-testid={`memory-signal-${s.label}`}>
+                  <div className="flex items-center justify-between text-sm font-bold">
+                    <span>{s.label}</span>
+                    <span className="mono text-[10px] text-[#72920f]">{s.confidence}%</span>
+                  </div>
+                  <p className="mt-1 text-xs leading-5 text-muted-foreground">{s.signal}</p>
+                  <div className="mt-2"><Meter value={s.confidence}/></div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="mt-5 rounded-[18px] bg-[#20243b] p-6 text-[#f2eedf]">
+        <div className="eyebrow !text-[#a0a2b0]">Learnings worth carrying</div>
+        <div className="mt-5 grid gap-4 md:grid-cols-3">
+          {m.learnings?.map((l, i) => (
+            <div className="border-l border-[#d8f66a] pl-4 text-sm leading-6" key={l} data-testid={`learning-${i}`}>{l}</div>
+          ))}
+        </div>
+      </div>
+    </Shell>
+  );
 }
 
 export function ActivityPage() {
@@ -2659,7 +2728,6 @@ export function SettingsPage() {
   const settings = useGetSettings();
   const updateSettings = useUpdateSettings();
   const [demo, setDemo] = useState(true);
-  const [apiKey, setApiKey] = useState(getGeminiApiKey() || '');
   const [form, setForm] = useState({
     name: 'Alex Rivera',
     niche: 'AI engineering and developer tools',
@@ -2801,38 +2869,6 @@ export function SettingsPage() {
               }`}
             />
           </button>
-        </div>
-        <div className="panel p-6 md:p-8">
-          <div className="flex items-center justify-between">
-            <div className="eyebrow text-[#b8d954]">Google Gemini Intelligence Engine</div>
-            <span className="rounded-full bg-[#3c415e] px-2.5 py-0.5 text-[10px] font-bold text-[#f2eedf]">
-              {apiKey ? 'Active API Key' : 'Deterministic Mode'}
-            </span>
-          </div>
-          <h3 className="mt-2 text-base font-bold">Dual-Engine AI Intelligence</h3>
-          <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-            CreatorPulse runs seamlessly with or without a key. When a Gemini API key is configured, live generative intelligence and text-embedding-004 vectors are enabled. Without a key, the mathematical Section 50 scoring formula and 42-video catalog semantic engine execute deterministically with zero latency and zero crashes.
-          </p>
-          <div className="mt-4 flex flex-col md:flex-row gap-3">
-            <input
-              type="password"
-              placeholder="Enter GEMINI_API_KEY (AIzaSy...)"
-              value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
-              className="flex-1 rounded-xl border border-input bg-background px-3 py-2 text-xs"
-              data-testid="input-gemini-api-key"
-            />
-            <Button
-              onClick={() => {
-                setGeminiApiKey(apiKey);
-                toast.success(apiKey ? 'Gemini API Key saved for live generation!' : 'Using deterministic AI engine');
-              }}
-              variant="secondary"
-              testId="button-save-gemini-key"
-            >
-              Update AI Mode
-            </Button>
-          </div>
         </div>
       </div>
     </Shell>

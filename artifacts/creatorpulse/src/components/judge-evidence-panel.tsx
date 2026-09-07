@@ -1,5 +1,6 @@
-import { useState } from 'react';
-import { ShieldCheck, ArrowRight, CheckCircle2, AlertCircle, FileText, Database, Compass, Eye, Sparkles, RefreshCw } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
+import { ShieldCheck, ArrowRight, CheckCircle2, AlertCircle, FileText, Database, Compass, Eye, Sparkles, RefreshCw, X } from 'lucide-react';
 
 export interface JudgeEvidenceProps {
   channel: any;
@@ -19,6 +20,22 @@ export function JudgeEvidencePanel({
   memory,
 }: JudgeEvidenceProps) {
   const [isOpen, setIsOpen] = useState(false);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setIsOpen(false);
+    };
+    if (isOpen) {
+      document.body.style.overflow = 'hidden';
+      window.addEventListener('keydown', handleKeyDown);
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => {
+      document.body.style.overflow = '';
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isOpen]);
 
   const isLive = (channel?.dataMode || '').toLowerCase().includes('live');
 
@@ -126,9 +143,14 @@ export function JudgeEvidencePanel({
         Judge Evidence & Audit Panel
       </button>
 
-      {isOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm animate-fade-in">
-          <div className="max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-2xl border border-[#3c415e] bg-[#141829] p-6 text-[#f2eedf] shadow-2xl">
+      {isOpen && typeof document !== 'undefined' && createPortal(
+        <div
+          className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/85 p-4 backdrop-blur-md animate-fade-in"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setIsOpen(false);
+          }}
+        >
+          <div className="max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-2xl border border-[#3c415e] bg-[#141829] p-6 text-[#f2eedf] shadow-2xl relative z-10">
             <div className="flex items-start justify-between border-b border-[#2d324d] pb-4">
               <div>
                 <div className="eyebrow flex items-center gap-1.5 !text-emerald-400">
@@ -145,7 +167,7 @@ export function JudgeEvidencePanel({
                 onClick={() => setIsOpen(false)}
                 className="rounded-lg p-1.5 text-muted-foreground hover:text-white"
               >
-                ✕
+                <X size={18} />
               </button>
             </div>
 
@@ -205,7 +227,8 @@ export function JudgeEvidencePanel({
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </>
   );

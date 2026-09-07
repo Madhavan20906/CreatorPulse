@@ -21,9 +21,12 @@ import {
   Target,
   Video,
   X,
+  LogOut,
 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation } from 'wouter';
+import { useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
 import {
   useGetChannel,
   useGetSettings,
@@ -135,6 +138,18 @@ export function Shell({
         JSON.stringify(Array.from(allIds))
       );
     } catch {}
+  };
+
+  const queryClient = useQueryClient();
+  const handleSignOut = () => {
+    try {
+      localStorage.removeItem('creatorpulse:lastContentId');
+      localStorage.removeItem('creatorpulse:read_notifications');
+      localStorage.removeItem('creatorpulse:customChannel');
+    } catch {}
+    toast.success('Signed out. Redirecting to channel setup...');
+    queryClient.clear();
+    setLocation('/setup');
   };
 
   // Keyboard shortcut for Cmd+K / Ctrl+K search and Escape
@@ -258,6 +273,17 @@ export function Shell({
               size={13}
             />
           </Link>
+          <button
+            onClick={handleSignOut}
+            className="mt-2 flex w-full items-center justify-between gap-1.5 rounded-lg border border-[#3c415e] bg-[#20243b]/80 px-2.5 py-1.5 text-[11px] font-medium text-sidebar-foreground/75 hover:border-red-500/50 hover:bg-red-500/15 hover:text-red-400 transition-all shadow-sm"
+            data-testid="button-sign-out"
+            title="Sign out of current channel and switch account"
+          >
+            <span className="flex items-center gap-1.5">
+              <LogOut size={12} className="shrink-0" /> Sign out
+            </span>
+            <span className="mono text-[9px] uppercase tracking-wider text-muted-foreground">Switch</span>
+          </button>
         </div>
 
         {/* Navigation Links */}

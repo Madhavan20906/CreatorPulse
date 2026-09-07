@@ -45,6 +45,97 @@ function deriveTopics(videos) {
   }));
 }
 
+function inferVideoFormat(title, desc) {
+  const lower = ((title || "") + " " + (desc || "")).toLowerCase();
+  if (lower.includes("#shorts") || lower.includes("#short")) return "Short form";
+  if (lower.includes("how to") || lower.includes("tutorial") || lower.includes("build") || lower.includes("guide") || lower.includes("tips") || lower.includes("step by step")) {
+    return "Practical tutorial";
+  }
+  if (lower.includes("vs") || lower.includes("explained") || lower.includes("deep dive") || lower.includes("honest review") || lower.includes("breakdown") || lower.includes("tour") || lower.includes("vlog")) {
+    return "Deep dive";
+  }
+  if (lower.includes("why") || lower.includes("future of") || lower.includes("truth about") || lower.includes("stop doing") || lower.includes("history")) {
+    return "Essay";
+  }
+  return "Practical tutorial";
+}
+
+function detectChannelNiche(channelName, channelDesc, videos) {
+  const combined = `${channelName} ${channelDesc} ${videos.map(v => v.title).join(" ")}`.toLowerCase();
+
+  if (/\b(travel|amsterdam|europe|trip|vacation|tour|vlog|city|flight|hotel|explore|nomad|wanderlust|backpack)\b/i.test(combined)) {
+    return "Travel, Lifestyle & Exploration";
+  }
+  if (/\b(gaming|gameplay|walkthrough|playthrough|fps|minecraft|roblox|gta|fortnite|steam|playstation|xbox|nintendo)\b/i.test(combined)) {
+    return "Gaming & Entertainment";
+  }
+  if (/\b(fitness|workout|gym|bodybuilding|nutrition|diet|muscle|cardio|weight loss|exercise|health|calisthenics)\b/i.test(combined)) {
+    return "Fitness, Health & Physical Training";
+  }
+  if (/\b(finance|money|invest|investing|stock|stocks|crypto|wealth|budget|real estate|passive income|trading)\b/i.test(combined)) {
+    return "Personal Finance, Investing & Wealth";
+  }
+  if (/\b(food|cooking|recipe|baking|chef|culinary|kitchen|street food|tasting|restaurant)\b/i.test(combined)) {
+    return "Food, Culinary Arts & Cooking";
+  }
+  if (/\b(ai|llm|agent|gpt|machine learning|python|coding|software|developer|programming|engineering|cloud|devops|mcp)\b/i.test(combined)) {
+    return "Technology, AI & Software Engineering";
+  }
+  if (/\b(business|startup|saas|founder|marketing|ecommerce|scale|sales|hiring|agency)\b/i.test(combined)) {
+    return "Business, Startups & Entrepreneurship";
+  }
+  if (/\b(art|design|drawing|illustration|animation|photoshop|filmmaking|photography|editing)\b/i.test(combined)) {
+    return "Creative Arts, Design & Filmmaking";
+  }
+  if (/\b(music|guitar|piano|beats|producer|song|singing|audio|synthesizer)\b/i.test(combined)) {
+    return "Music Production & Sound Design";
+  }
+  if (/\b(education|science|physics|math|biology|history|psychology|philosophy|lesson)\b/i.test(combined)) {
+    return "Education & Science Explainers";
+  }
+
+  return "Lifestyle, Strategy & Creative Content";
+}
+
+function classifyVideoTopicDynamic(title, desc, channelNiche) {
+  const text = `${title} ${desc || ""}`.toLowerCase();
+
+  if (/\b(travel|amsterdam|city|trip|flight|hotel|vlog|tour|walk|backpack)\b/i.test(text)) {
+    return "Travel Guides & City Vlogs";
+  }
+  if (/\b(budget|cost|cheap|free|saving|afford|expenses)\b/i.test(text)) {
+    return "Budgeting & Logistics";
+  }
+  if (/\b(food|restaurant|eat|cafe|street food|coffee)\b/i.test(text)) {
+    return "Food & Local Culture";
+  }
+  if (/\b(ai|llm|gpt|agent|agents|model|mcp|prompt)\b/i.test(text)) {
+    return "AI & Autonomous Systems";
+  }
+  if (/\b(code|coding|software|python|javascript|typescript|react|rust|backend|frontend)\b/i.test(text)) {
+    return "Software Engineering";
+  }
+  if (/\b(review|unboxing|hardware|setup|gear|camera|tech)\b/i.test(text)) {
+    return "Gear & Hardware Reviews";
+  }
+  if (/\b(mistake|fail|avoid|problem|truth|honest)\b/i.test(text)) {
+    return "Mistakes & Lessons";
+  }
+
+  const words = title
+    .replace(/[^a-zA-Z0-9\s]/g, " ")
+    .split(/\s+/)
+    .filter((w) => w.length > 3 && !/^(this|that|with|from|what|when|where|here|have|more|your|about|just|they|video|part)$/i.test(w));
+
+  if (words.length >= 2) {
+    return `${words[0].charAt(0).toUpperCase() + words[0].slice(1).toLowerCase()} & ${words[1].charAt(0).toUpperCase() + words[1].slice(1).toLowerCase()}`;
+  }
+  if (words.length === 1) {
+    return `${words[0].charAt(0).toUpperCase() + words[0].slice(1).toLowerCase()} Focus`;
+  }
+  return channelNiche.split(/[,&]/)[0]?.trim() || "Core Content";
+}
+
 async function fetchLiveYouTubeCatalog(channelInput) {
   let cleanInput = channelInput.trim();
   let handle = cleanInput.startsWith("@") ? cleanInput : `@${cleanInput.replace(/^https?:\/\/(www\.)?youtube\.com\//, "").replace(/^\/?@?/, "")}`;
@@ -80,10 +171,54 @@ async function fetchLiveYouTubeCatalog(channelInput) {
   const titleMatch = html.match(/<meta property="og:title" content="([^"]+)"/) || html.match(/<title>([^<]+)<\/title>/);
   let channelName = titleMatch ? unescapeHtml(titleMatch[1].replace(/\s*-\s*YouTube$/i, "")) : handle.replace("@", "");
 
-  // Extract sub count
+  // Extract description if present
+  const descMatch = html.match(/<meta property="og:description" content="([^"]+)"/);
+  const channelDesc = descMatch ? unescapeHtml(descMatch[1]) : "";
+
+  // Extract sub count from ytInitialData / HTML
   const subMatch = html.match(/"subscriberCountText":\{"accessibility":\{"accessibilityData":\{"label":"([^"]+)"\}\}/) ||
-    html.match(/"simpleText":"([\d\.]+[KMB]?\s+subscribers)"/i);
-  const subscribers = subMatch ? parseSubscriberString(subMatch[1]) : 180000;
+    html.match(/"simpleText":"([\d\.]+[KMBkmb]?\s+subscribers?)"/i) ||
+    html.match(/"label":"([\d\.]+[KMBkmb]?\s+(?:million|thousand|subscribers?))"/i);
+
+  let rawSubscribers = subMatch ? parseSubscriberString(subMatch[1]) : null;
+
+  // Extract duration map from ytInitialData lockupViewModel or thumbnail badges
+  const durationMap = new Map();
+  try {
+    const jsonMatch = html.match(/var ytInitialData = ({.*?});<\/script>/);
+    if (jsonMatch) {
+      const parsedData = JSON.parse(jsonMatch[1]);
+      function harvestDurations(obj) {
+        if (!obj || typeof obj !== "object") return;
+        if (obj.lockupViewModel) {
+          const vm = obj.lockupViewModel;
+          const cid = vm.contentId;
+          const str = JSON.stringify(vm);
+          const colonMatch = str.match(/"(?:text|simpleText)":"(\d{1,2}:\d{2}(?::\d{2})?)"/);
+          if (colonMatch && cid) {
+            durationMap.set(cid, colonMatch[1]);
+          } else {
+            const labelMatch = str.match(/"label":"(\d+)\s*minutes?(?:,\s*(\d+)\s*seconds?)?"/i);
+            if (labelMatch && cid) {
+              const mins = String(parseInt(labelMatch[1], 10)).padStart(2, "0");
+              const secs = String(parseInt(labelMatch[2] || "0", 10)).padStart(2, "0");
+              durationMap.set(cid, `${mins}:${secs}`);
+            }
+          }
+        }
+        if (obj.videoRenderer) {
+          const vr = obj.videoRenderer;
+          const cid = vr.videoId;
+          const dur = vr.lengthText?.simpleText;
+          if (dur && cid) durationMap.set(cid, dur);
+        }
+        for (const v of Object.values(obj)) harvestDurations(v);
+      }
+      harvestDurations(parsedData);
+    }
+  } catch (err) {
+    // Gracefully handle ytInitialData parse errors
+  }
 
   // Fetch Atom RSS Feed
   const feedUrl = `https://www.youtube.com/feeds/videos.xml?channel_id=${channelId}`;
@@ -107,26 +242,30 @@ async function fetchLiveYouTubeCatalog(channelInput) {
     const vTitleMatch = chunk.match(/<title>([^<]+)<\/title>/);
     const pubMatch = chunk.match(/<published>([^<]+)<\/published>/);
     const viewsMatch = chunk.match(/<media:statistics\s+views="(\d+)"/);
+    const descChunkMatch = chunk.match(/<media:description>([\s\S]*?)<\/media:description>/);
 
     if (!idMatch || !vTitleMatch) continue;
 
+    const vid = idMatch[1];
     const rawTitle = unescapeHtml(vTitleMatch[1]);
+    const rawVideoDesc = descChunkMatch ? unescapeHtml(descChunkMatch[1]) : "";
     const views = viewsMatch ? parseInt(viewsMatch[1], 10) : 45000;
     const publishedAt = pubMatch ? pubMatch[1].split("T")[0] : new Date().toISOString().split("T")[0];
 
-    const words = rawTitle.split(/\s+/).filter(w => w.length > 3);
-    const topic = words.slice(0, 2).join(" ") || "Core Content";
+    const format = inferVideoFormat(rawTitle, rawVideoDesc);
+    const resolvedDuration = durationMap.get(vid) || (format === "Short form" ? "00:58" : "03:45");
 
     videos.push({
-      id: idMatch[1],
+      id: vid,
       title: rawTitle,
-      topic,
-      format: rawTitle.toLowerCase().includes("how to") ? "Practical tutorial" : "Deep dive",
+      topic: "", // will classify after detecting channel niche
+      format,
       views,
-      engagementRate: Number((Math.min(12, Math.max(4.5, 9.5 - Math.log10(Math.max(1000, views)) * 0.8))).toFixed(1)),
+      engagementRate: Number((Math.min(12, Math.max(4.5, 9.5 - Math.log10(Math.max(100, views)) * 0.8))).toFixed(1)),
       publishedAt,
-      duration: "12:30",
+      duration: resolvedDuration,
       hook: rawTitle,
+      description: rawVideoDesc,
     });
   }
 
@@ -134,10 +273,26 @@ async function fetchLiveYouTubeCatalog(channelInput) {
     throw new Error(`Channel "${channelName}" has no public uploads.`);
   }
 
+  // Detect dynamic niche based on actual content
+  const detectedNiche = detectChannelNiche(channelName, channelDesc, videos);
+
+  // Classify each video's topic based on detected niche
+  for (const v of videos) {
+    v.topic = classifyVideoTopicDynamic(v.title, v.description, detectedNiche);
+    delete v.description;
+  }
+
+  // Calculate realistic subscribers if not found directly
+  const totalViews = videos.reduce((s, v) => s + (v.views || 0), 0);
+  const avgViews = Math.round(totalViews / videos.length);
+  const subscribers = rawSubscribers !== null
+    ? rawSubscribers
+    : Math.max(1, Math.round(avgViews * 0.6));
+
   return {
     name: channelName,
     handle,
-    niche: "Technology & Software Engineering",
+    niche: detectedNiche,
     subscribers,
     dataMode: `Live YouTube public catalog · Ingested live via YouTube public feed (${videos.length} real uploads)`,
     videos,

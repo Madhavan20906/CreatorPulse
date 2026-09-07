@@ -67,10 +67,56 @@ function inferVideoFormat(title: string, desc: string): string {
   return "Practical tutorial";
 }
 
+function detectChannelNiche(channelName: string, channelDesc: string, videos: ChannelVideo[]): string {
+  const combined = `${channelName} ${channelDesc} ${videos.map((v) => v.title).join(" ")}`.toLowerCase();
+
+  if (/\b(travel|amsterdam|europe|trip|vacation|tour|vlog|city|flight|hotel|explore|nomad|wanderlust|backpack)\b/i.test(combined)) {
+    return "Travel, Lifestyle & Exploration";
+  }
+  if (/\b(gaming|gameplay|walkthrough|playthrough|fps|minecraft|roblox|gta|fortnite|steam|playstation|xbox|nintendo)\b/i.test(combined)) {
+    return "Gaming & Entertainment";
+  }
+  if (/\b(fitness|workout|gym|bodybuilding|nutrition|diet|muscle|cardio|weight loss|exercise|health|calisthenics)\b/i.test(combined)) {
+    return "Fitness, Health & Physical Training";
+  }
+  if (/\b(finance|money|invest|investing|stock|stocks|crypto|wealth|budget|real estate|passive income|trading)\b/i.test(combined)) {
+    return "Personal Finance, Investing & Wealth";
+  }
+  if (/\b(food|cooking|recipe|baking|chef|culinary|kitchen|street food|tasting|restaurant)\b/i.test(combined)) {
+    return "Food, Culinary Arts & Cooking";
+  }
+  if (/\b(ai|llm|agent|gpt|machine learning|python|coding|software|developer|programming|engineering|cloud|devops|mcp)\b/i.test(combined)) {
+    return "Technology, AI & Software Engineering";
+  }
+  if (/\b(business|startup|saas|founder|marketing|ecommerce|scale|sales|hiring|agency)\b/i.test(combined)) {
+    return "Business, Startups & Entrepreneurship";
+  }
+  if (/\b(art|design|drawing|illustration|animation|photoshop|filmmaking|photography|editing)\b/i.test(combined)) {
+    return "Creative Arts, Design & Filmmaking";
+  }
+  if (/\b(music|guitar|piano|beats|producer|song|singing|audio|synthesizer)\b/i.test(combined)) {
+    return "Music Production & Sound Design";
+  }
+  if (/\b(education|science|physics|math|biology|history|psychology|philosophy|lesson)\b/i.test(combined)) {
+    return "Education & Science Explainers";
+  }
+
+  return "Lifestyle, Strategy & Creative Content";
+}
+
 function classifyVideoTopic(title: string, desc: string, channelNiche: string): string {
   const text = (title + " " + desc).toLowerCase();
 
-  if (/\b(ai|llm|gpt|agent|agents|model|gemini|openai|anthropic|rag|prompt|deep learning|neural)\b/i.test(text)) {
+  if (/\b(travel|amsterdam|city|trip|flight|hotel|vlog|tour|walk|backpack)\b/i.test(text)) {
+    return "Travel Guides & City Vlogs";
+  }
+  if (/\b(budget|cost|cheap|free|saving|afford|expenses)\b/i.test(text)) {
+    return "Budgeting & Logistics";
+  }
+  if (/\b(food|restaurant|eat|cafe|street food|coffee)\b/i.test(text)) {
+    return "Food & Local Culture";
+  }
+  if (/\b(ai|llm|gpt|agent|agents|model|gemini|openai|anthropic|rag|prompt|deep learning|neural|mcp)\b/i.test(text)) {
     return "AI & Autonomous Systems";
   }
   if (/\b(typescript|javascript|rust|python|golang|react|nextjs|node|docker|linux|database|sql|git|css|html|frontend|backend|api)\b/i.test(text)) {
@@ -93,13 +139,16 @@ function classifyVideoTopic(title: string, desc: string, channelNiche: string): 
   const words = title
     .replace(/[^a-zA-Z0-9\s]/g, " ")
     .split(/\s+/)
-    .filter((w) => w.length > 3 && !/^(this|that|with|from|what|when|where|here|have|more|your|about|just|they)$/i.test(w));
+    .filter((w) => w.length > 3 && !/^(this|that|with|from|what|when|where|here|have|more|your|about|just|they|video|part)$/i.test(w));
 
   if (words.length >= 2) {
     return `${words[0].charAt(0).toUpperCase() + words[0].slice(1).toLowerCase()} & ${words[1].charAt(0).toUpperCase() + words[1].slice(1).toLowerCase()}`;
   }
+  if (words.length === 1) {
+    return `${words[0].charAt(0).toUpperCase() + words[0].slice(1).toLowerCase()} Focus`;
+  }
 
-  return channelNiche.split(",")[0]?.trim() || "Core Focus";
+  return channelNiche.split(/[,&]/)[0]?.trim() || "Core Focus";
 }
 
 export async function fetchLiveYouTubeCatalog(handleOrUrl: string): Promise<PublicChannelProfile> {
@@ -130,7 +179,8 @@ export async function fetchLiveYouTubeCatalog(handleOrUrl: string): Promise<Publ
 
   let channelName = targetHandle ? targetHandle.replace("@", "") : "YouTube Channel";
   let channelNiche = "Technology, AI, and Software Engineering";
-  let subscribers = 150000;
+  let rawSubscribers: number | null = null;
+  const durationMap = new Map<string, string>();
 
   // If we don't have channelId directly, scrape the channel landing page
   if (!channelId && targetHandle) {
@@ -189,9 +239,46 @@ export async function fetchLiveYouTubeCatalog(handleOrUrl: string): Promise<Publ
     // Extract subscriber count
     const subMatch =
       html.match(/"simpleText":"([0-9\.]+[KMBkmb]?\s+subscribers?)"/i) ||
-      html.match(/"label":"([0-9\.]+[KMBkmb]?\s+(?:million|thousand|subscribers))"/i);
+      html.match(/"label":"([0-9\.]+[KMBkmb]?\s+(?:million|thousand|subscribers?))"/i);
     if (subMatch) {
-      subscribers = parseSubscriberString(subMatch[1]);
+      rawSubscribers = parseSubscriberString(subMatch[1]);
+    }
+
+    // Extract duration map from ytInitialData lockupViewModel or thumbnail badges
+    try {
+      const jsonMatch = html.match(/var ytInitialData = ({.*?});<\/script>/);
+      if (jsonMatch) {
+        const parsedData = JSON.parse(jsonMatch[1]);
+        const harvestDurations = (obj: any): void => {
+          if (!obj || typeof obj !== "object") return;
+          if (obj.lockupViewModel) {
+            const vm = obj.lockupViewModel;
+            const cid = vm.contentId;
+            const str = JSON.stringify(vm);
+            const colonMatch = str.match(/"(?:text|simpleText)":"(\d{1,2}:\d{2}(?::\d{2})?)"/);
+            if (colonMatch && cid) {
+              durationMap.set(cid, colonMatch[1]);
+            } else {
+              const labelMatch = str.match(/"label":"(\d+)\s*minutes?(?:,\s*(\d+)\s*seconds?)?"/i);
+              if (labelMatch && cid) {
+                const mins = String(parseInt(labelMatch[1], 10)).padStart(2, "0");
+                const secs = String(parseInt(labelMatch[2] || "0", 10)).padStart(2, "0");
+                durationMap.set(cid, `${mins}:${secs}`);
+              }
+            }
+          }
+          if (obj.videoRenderer) {
+            const vr = obj.videoRenderer;
+            const cid = vr.videoId;
+            const dur = vr.lengthText?.simpleText;
+            if (dur && cid) durationMap.set(cid, dur);
+          }
+          for (const v of Object.values(obj)) harvestDurations(v);
+        };
+        harvestDurations(parsedData);
+      }
+    } catch {
+      // Gracefully handle parse issues
     }
   }
 
@@ -258,18 +345,18 @@ export async function fetchLiveYouTubeCatalog(handleOrUrl: string): Promise<Publ
       title;
 
     const format = inferVideoFormat(title, desc);
-    const topic = classifyVideoTopic(title, desc, channelNiche);
     const publishedAt = published ? published.split("T")[0] : new Date().toISOString().split("T")[0];
+    const resolvedDuration = durationMap.get(videoId) || (format === "Short form" ? "00:58" : "03:45");
 
     videos.push({
       id: videoId,
       title,
-      topic,
+      topic: "",
       format,
       views,
       engagementRate,
       publishedAt,
-      duration: format === "Short form" ? "00:55" : "12:30",
+      duration: resolvedDuration,
       hook: hook.slice(0, 180),
     });
   }
@@ -278,16 +365,25 @@ export async function fetchLiveYouTubeCatalog(handleOrUrl: string): Promise<Publ
     throw new Error(`No public uploads found for "${channelName}". The channel may have zero public uploads.`);
   }
 
-  // If subscriber count was not extracted, estimate from recent average views
-  if (!subscribers || subscribers === 150000) {
-    const avgViews = Math.round(videos.reduce((s, v) => s + v.views, 0) / videos.length);
-    subscribers = Math.max(5000, Math.round(avgViews * 3.2));
+  // Detect dynamic niche based on actual catalog
+  const detectedNiche = detectChannelNiche(channelName, channelNiche, videos);
+
+  // Classify each video's topic based on detected niche
+  for (const v of videos) {
+    v.topic = classifyVideoTopic(v.title, v.hook, detectedNiche);
   }
+
+  // If subscriber count was not extracted, estimate realistically from recent average views
+  const totalViews = videos.reduce((s, v) => s + v.views, 0);
+  const avgViews = Math.round(totalViews / videos.length);
+  const subscribers = rawSubscribers !== null
+    ? rawSubscribers
+    : Math.max(1, Math.round(avgViews * 0.6));
 
   return {
     name: channelName,
     handle: targetHandle || `@${channelName.toLowerCase().replace(/[^a-z0-9]/g, "")}`,
-    niche: channelNiche,
+    niche: detectedNiche,
     subscribers,
     dataMode: `Live YouTube public catalog · Ingested live via YouTube public feed (${videos.length} real uploads)`,
     videos,
