@@ -11,7 +11,7 @@ export type AuthTokenGetter = () => Promise<string | null> | string | null;
 const NO_BODY_STATUS = new Set([204, 205, 304]);
 const DEFAULT_JSON_ACCEPT = "application/json, application/problem+json";
 
-import { handleClientApi } from "./client-engine";
+import { handleClientApi, syncIngestedChannelToClientState } from "./client-engine";
 
 // ---------------------------------------------------------------------------
 // Module-level configuration
@@ -372,7 +372,16 @@ export async function customFetch<T = unknown>(
     const isStaticHostMiss = (response.status === 405 || response.status === 404 || isHtmlRedirect) && requestInfo.url.includes("/api");
 
     if (response.ok && !isHtmlRedirect) {
-      return (await parseSuccessBody(response, responseType, requestInfo)) as T;
+      const parsedData = (await parseSuccessBody(response, responseType, requestInfo)) as T;
+      if (
+        requestInfo.url.includes("/api/channel/ingest") &&
+        parsedData &&
+        typeof parsedData === "object" &&
+        Array.isArray((parsedData as any).videos)
+      ) {
+        syncIngestedChannelToClientState(parsedData);
+      }
+      return parsedData;
     }
 
     if (!response.ok && !isStaticHostMiss) {

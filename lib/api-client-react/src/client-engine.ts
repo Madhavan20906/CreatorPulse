@@ -396,6 +396,68 @@ export function buildContentPackageClient(opportunity: any, voice = "Practical, 
   };
 }
 
+export function syncIngestedChannelToClientState(channelData: any): any {
+  if (!channelData || typeof channelData !== "object") return;
+  const state = getClientState();
+  const resolvedVideos = Array.isArray(channelData.videos) ? channelData.videos : [];
+  const totalViews = resolvedVideos.reduce((sum: number, v: any) => sum + (Number(v.views) || 0), 0);
+  const averageViews = Math.round(totalViews / Math.max(1, resolvedVideos.length));
+
+  state.channel = {
+    name: channelData.name || "Creator",
+    handle: channelData.handle || "@creator",
+    niche: channelData.niche || "Engineering and Technology",
+    subscribers: Number(channelData.subscribers) || 120000,
+    totalViews,
+    averageViews,
+    videosAnalyzed: resolvedVideos.length,
+    topTopic: resolvedVideos[0]?.topic || "Core",
+    strongestFormat: "Practical tutorial",
+    dataMode: channelData.dataMode || "Live YouTube public catalog",
+    topics: channelData.topics?.length ? channelData.topics : deriveTopicsFromVideos(resolvedVideos),
+    videos: resolvedVideos,
+  };
+
+  state.pulse = state.pulse || {};
+  state.pulse.baselineViews = averageViews || 41300;
+  state.pulse.creatorName = state.channel.name;
+  state.pulse.headline = `Channel intelligence updated for ${state.channel.name}.`;
+  state.pulse.trend = "+24% vs. previous period";
+  state.pulse.growthOpportunities = 7;
+  state.pulse.contentReady = 4;
+  state.pulse.pendingApproval = 2;
+  state.pulse.publishedThisWeek = 5;
+  state.opportunities = deriveOpportunitiesForChannel(state.channel);
+  state.pulse.recommended = state.opportunities[0] || {
+    id: "opp-default",
+    title: `Scaling ${state.channel.topTopic || "Content"}: What the top 1% know`,
+    score: 88,
+    rationale: "Unsaturated high-retention opportunity derived from channel catalog.",
+    signals: ["Proven audience fit", "High search demand"],
+    prediction: { direction: "Above creator baseline", confidence: 0.82, baselineMultiplier: 1.7 },
+  };
+
+  if (!state.settings) {
+    state.settings = {};
+  }
+  state.settings.name = state.channel.name;
+  state.settings.niche = state.channel.niche;
+
+  if (Array.isArray(state.activity)) {
+    state.activity.unshift({
+      id: `act-${Date.now()}`,
+      agent: "Channel Brain",
+      action: "Ingested live channel catalog",
+      detail: `Swapped catalog to ${state.channel.name} (${state.channel.handle}) · ${resolvedVideos.length} public videos analyzed`,
+      timestamp: "Just now",
+      status: "complete",
+    });
+  }
+
+  saveClientState(state);
+  return state.channel;
+}
+
 export async function handleClientApi(method: string, path: string, body?: any): Promise<any> {
   const state = getClientState();
   const cleanPath = path.split("?")[0].replace(/\/$/, "");
@@ -407,8 +469,25 @@ export async function handleClientApi(method: string, path: string, body?: any):
 
   // Pulse
   if (cleanPath === "/api/pulse" && method === "GET") {
-    state.pulse.recommended = state.opportunities.find((o) => o.status === "recommended") || state.opportunities[0];
-    state.pulse.recentActivity = state.activity.slice(0, 4);
+    state.pulse = state.pulse || {};
+    state.pulse.creatorName = state.pulse.creatorName || state.channel?.name || "Creator";
+    state.pulse.headline = state.pulse.headline || "Your channel is trending upward.";
+    state.pulse.baselineViews = state.pulse.baselineViews || state.channel?.averageViews || 41300;
+    state.pulse.growthOpportunities = state.pulse.growthOpportunities || 7;
+    state.pulse.contentReady = state.pulse.contentReady || 4;
+    state.pulse.publishedThisWeek = state.pulse.publishedThisWeek || 5;
+    state.pulse.recommended =
+      state.opportunities?.find((o) => o.status === "recommended") ||
+      state.opportunities?.[0] || {
+        id: "opp-production-agents",
+        title: "Why AI agents work in a demo but fail in production",
+        score: 83,
+        rationale: "Your strongest topic has proven demand, but your library has no video directly addressing production reliability.",
+        signals: ["AI-agent videos are 1.9× baseline", "Low library coverage of production reliability"],
+        prediction: { direction: "Above creator baseline", confidence: 0.74, baselineMultiplier: 1.8 },
+        status: "recommended",
+      };
+    state.pulse.recentActivity = (state.activity || []).slice(0, 4);
     return state.pulse;
   }
 
@@ -417,7 +496,7 @@ export async function handleClientApi(method: string, path: string, body?: any):
     return state.channel;
   }
 
-  // Channel Ingest (Live YouTube public data or custom CSV/JSON)
+  // Channel Ingest (Live YouTube public data, diverse mock evaluation catalogs, or custom CSV/JSON)
   if (cleanPath === "/api/channel/ingest" && method === "POST") {
     const { channelUrlOrHandle, customVideos, channelName, niche } = body || {};
 
@@ -429,144 +508,175 @@ export async function handleClientApi(method: string, path: string, body?: any):
     let dataMode = "Live YouTube public catalog";
 
     const cleanHandleKey = (channelUrlOrHandle || "").trim().toLowerCase();
-    const preset = Object.entries(POPULAR_REAL_CHANNELS).find(
-      ([key]) => cleanHandleKey.includes(key.replace("@", "")) || cleanHandleKey === key
-    );
 
-    if (preset) {
-      const p = preset[1];
-      resolvedName = p.name;
-      resolvedHandle = p.handle;
-      resolvedNiche = p.niche;
-      resolvedSubscribers = p.subscribers;
-      resolvedVideos = clone(p.videos);
-      dataMode = p.dataMode;
-    } else if (Array.isArray(customVideos) && customVideos.length > 0) {
-      resolvedName = channelName || "Imported Channel";
-      resolvedHandle = channelUrlOrHandle ? (channelUrlOrHandle.startsWith("@") ? channelUrlOrHandle : `@${channelUrlOrHandle}`) : "@customchannel";
-      resolvedVideos = customVideos.map((v: any, idx: number) => ({
-        id: v.id || `imported-${idx + 1}`,
-        title: v.title || `Video ${idx + 1}`,
-        topic: v.topic || "Core Content",
-        format: v.format || "Practical tutorial",
-        views: Number(v.views) || 25000,
-        engagementRate: Number(v.engagementRate) || 6.5,
-        publishedAt: v.publishedAt || new Date().toISOString().split("T")[0],
-        duration: v.duration || "12:00",
-        hook: v.hook || v.title || "",
-      }));
-      dataMode = `Imported creator history (${resolvedVideos.length} videos)`;
-    } else {
-      // In-browser custom channel generation for any arbitrary handle/niche
-      resolvedName = channelName || (channelUrlOrHandle ? channelUrlOrHandle.replace(/^@/, "") : "Creator");
-      resolvedHandle = channelUrlOrHandle ? (channelUrlOrHandle.startsWith("@") ? channelUrlOrHandle : `@${channelUrlOrHandle}`) : "@creator";
-      resolvedNiche = niche || "Engineering and Technology";
-      resolvedSubscribers = 48500;
-
-      const primaryTopic = resolvedNiche.split(/[&,]/)[0].trim() || "Engineering";
-      const secondaryTopic = resolvedNiche.split(/[&,]/)[1]?.trim() || "Workflows";
-
+    // 1. Mock Presets (Alex Rivera, Sarah Connor)
+    if (cleanHandleKey.includes("buildwithalex") || cleanHandleKey.includes("alex")) {
+      resolvedName = "Alex Rivera";
+      resolvedHandle = "@buildwithalex";
+      resolvedNiche = "AI engineering and developer tools";
+      resolvedSubscribers = 142000;
+      resolvedVideos = clone((SEED_STATE.channel as any).videos);
+      dataMode = "Evaluation Mock Catalog · 42 synthetic videos for offline testing";
+    } else if (cleanHandleKey.includes("sarahcodes") || cleanHandleKey.includes("sarah")) {
+      resolvedName = "Sarah Connor";
+      resolvedHandle = "@sarahcodes";
+      resolvedNiche = "Cloud architecture & cybersecurity";
+      resolvedSubscribers = 89000;
+      dataMode = "Evaluation Mock Catalog · Cybersecurity & Cloud";
       resolvedVideos = [
         {
-          id: `${resolvedHandle.replace(/[^a-zA-Z0-9]/g, "")}-v1`,
-          title: `How I built my first ${primaryTopic} system from scratch`,
-          topic: primaryTopic,
+          id: "sarah-v1",
+          title: "Zero Trust Architecture: The Practical Implementation Guide",
+          topic: "Zero Trust & Security",
           format: "Practical tutorial",
-          views: 54200,
-          engagementRate: 8.1,
-          publishedAt: "2026-08-22",
-          duration: "14:32",
-          hook: `The true engineering bottleneck in ${primaryTopic.toLowerCase()} is not what most people think.`,
+          views: 76400,
+          engagementRate: 8.7,
+          publishedAt: "2026-08-19",
+          duration: "16:10",
+          hook: "Perimeter security is dead. Here is how we verify every packet in 2026.",
         },
         {
-          id: `${resolvedHandle.replace(/[^a-zA-Z0-9]/g, "")}-v2`,
-          title: `The architecture mistakes I made in ${secondaryTopic}`,
-          topic: secondaryTopic,
+          id: "sarah-v2",
+          title: "How I Exploited a Misconfigured Kubernetes Cluster",
+          topic: "Cloud Penetration Testing",
           format: "Deep dive",
-          views: 43100,
-          engagementRate: 7.2,
-          publishedAt: "2026-08-11",
-          duration: "18:10",
-          hook: `Here are 3 production failure modes you will hit before scale.`,
+          views: 112000,
+          engagementRate: 9.6,
+          publishedAt: "2026-07-30",
+          duration: "21:40",
+          hook: "One default service account token was all it took to achieve cluster admin.",
         },
         {
-          id: `${resolvedHandle.replace(/[^a-zA-Z0-9]/g, "")}-v3`,
-          title: `5 essential tools for modern ${primaryTopic.toLowerCase()} in 2026`,
-          topic: primaryTopic,
+          id: "sarah-v3",
+          title: "AWS IAM Privilege Escalation: 5 Real-World Scenarios",
+          topic: "Cloud Security",
           format: "Listicle",
-          views: 69400,
-          engagementRate: 8.6,
-          publishedAt: "2026-07-28",
-          duration: "11:06",
-          hook: `Stop stacking redundant frameworks when these 5 primitives solve 90% of use cases.`,
+          views: 58900,
+          engagementRate: 8.2,
+          publishedAt: "2026-07-14",
+          duration: "13:25",
+          hook: "Most dev teams don't realize these wildcard permissions allow root escalation.",
         },
         {
-          id: `${resolvedHandle.replace(/[^a-zA-Z0-9]/g, "")}-v4`,
-          title: `Why most ${secondaryTopic.toLowerCase()} setups fail in production`,
-          topic: secondaryTopic,
-          format: "Essay",
-          views: 39500,
-          engagementRate: 6.9,
-          publishedAt: "2026-07-15",
-          duration: "16:45",
-          hook: `A deep look at the operational tradeoffs that nobody talks about on social media.`,
-        },
-        {
-          id: `${resolvedHandle.replace(/[^a-zA-Z0-9]/g, "")}-v5`,
-          title: `End-to-end ${primaryTopic} walkthrough: From zero to deployment`,
-          topic: primaryTopic,
+          id: "sarah-v4",
+          title: "CI/CD Pipeline Security: Hardening GitHub Actions in Production",
+          topic: "Cloud Security",
           format: "Practical tutorial",
-          views: 81200,
+          views: 84300,
           engagementRate: 9.1,
-          publishedAt: "2026-06-30",
-          duration: "22:15",
-          hook: `We are building and deploying a complete production-grade pipeline in one session.`,
+          publishedAt: "2026-06-25",
+          duration: "15:30",
+          hook: "Dependency confusion and unpinned actions are leaking production secrets daily.",
         },
       ];
-      dataMode = `Custom Creator Ingested Catalog (${resolvedVideos.length} videos)`;
+    } else {
+      // 2. Real Channel Presets (@fireship, @mkbhd, @veritasium)
+      const preset = Object.entries(POPULAR_REAL_CHANNELS).find(
+        ([key]) => cleanHandleKey.includes(key.replace("@", "")) || cleanHandleKey === key
+      );
+
+      if (preset) {
+        const p = preset[1];
+        resolvedName = p.name;
+        resolvedHandle = p.handle;
+        resolvedNiche = p.niche;
+        resolvedSubscribers = p.subscribers;
+        resolvedVideos = clone(p.videos);
+        dataMode = p.dataMode;
+      } else if (Array.isArray(customVideos) && customVideos.length > 0) {
+        resolvedName = channelName || "Imported Channel";
+        resolvedHandle = channelUrlOrHandle ? (channelUrlOrHandle.startsWith("@") ? channelUrlOrHandle : `@${channelUrlOrHandle}`) : "@customchannel";
+        resolvedVideos = customVideos.map((v: any, idx: number) => ({
+          id: v.id || `imported-${idx + 1}`,
+          title: v.title || `Video ${idx + 1}`,
+          topic: v.topic || "Core Content",
+          format: v.format || "Practical tutorial",
+          views: Number(v.views) || 25000,
+          engagementRate: Number(v.engagementRate) || 6.5,
+          publishedAt: v.publishedAt || new Date().toISOString().split("T")[0],
+          duration: v.duration || "12:00",
+          hook: v.hook || v.title || "",
+        }));
+        dataMode = `Imported creator history (${resolvedVideos.length} videos)`;
+      } else {
+        // 3. In-browser custom channel generation for any arbitrary handle/niche
+        resolvedName = channelName || (channelUrlOrHandle ? channelUrlOrHandle.replace(/^@/, "") : "Creator");
+        resolvedHandle = channelUrlOrHandle ? (channelUrlOrHandle.startsWith("@") ? channelUrlOrHandle : `@${channelUrlOrHandle}`) : "@creator";
+        resolvedNiche = niche || "Engineering and Technology";
+        resolvedSubscribers = 48500;
+
+        const primaryTopic = resolvedNiche.split(/[&,]/)[0].trim() || "Engineering";
+        const secondaryTopic = resolvedNiche.split(/[&,]/)[1]?.trim() || "Workflows";
+
+        resolvedVideos = [
+          {
+            id: `${resolvedHandle.replace(/[^a-zA-Z0-9]/g, "")}-v1`,
+            title: `How I built my first ${primaryTopic} system from scratch`,
+            topic: primaryTopic,
+            format: "Practical tutorial",
+            views: 54200,
+            engagementRate: 8.1,
+            publishedAt: "2026-08-22",
+            duration: "14:32",
+            hook: `The true engineering bottleneck in ${primaryTopic.toLowerCase()} is not what most people think.`,
+          },
+          {
+            id: `${resolvedHandle.replace(/[^a-zA-Z0-9]/g, "")}-v2`,
+            title: `The architecture mistakes I made in ${secondaryTopic}`,
+            topic: secondaryTopic,
+            format: "Deep dive",
+            views: 43100,
+            engagementRate: 7.2,
+            publishedAt: "2026-08-11",
+            duration: "18:10",
+            hook: `Here are 3 production failure modes you will hit before scale.`,
+          },
+          {
+            id: `${resolvedHandle.replace(/[^a-zA-Z0-9]/g, "")}-v3`,
+            title: `5 essential tools for modern ${primaryTopic.toLowerCase()} in 2026`,
+            topic: primaryTopic,
+            format: "Listicle",
+            views: 69400,
+            engagementRate: 8.6,
+            publishedAt: "2026-07-28",
+            duration: "11:06",
+            hook: `Stop stacking redundant frameworks when these 5 primitives solve 90% of use cases.`,
+          },
+          {
+            id: `${resolvedHandle.replace(/[^a-zA-Z0-9]/g, "")}-v4`,
+            title: `Why most ${secondaryTopic.toLowerCase()} setups fail in production`,
+            topic: secondaryTopic,
+            format: "Essay",
+            views: 39500,
+            engagementRate: 6.9,
+            publishedAt: "2026-07-15",
+            duration: "16:45",
+            hook: `A deep look at the operational tradeoffs that nobody talks about on social media.`,
+          },
+          {
+            id: `${resolvedHandle.replace(/[^a-zA-Z0-9]/g, "")}-v5`,
+            title: `End-to-end ${primaryTopic} walkthrough: From zero to deployment`,
+            topic: primaryTopic,
+            format: "Practical tutorial",
+            views: 81200,
+            engagementRate: 9.1,
+            publishedAt: "2026-06-30",
+            duration: "22:15",
+            hook: `We are building and deploying a complete production-grade pipeline in one session.`,
+          },
+        ];
+        dataMode = `Custom Creator Catalog · Tailored for ${resolvedHandle} (Custom Channel Profile)`;
+      }
     }
 
-    const totalViews = resolvedVideos.reduce((sum: number, v: any) => sum + (v.views || 0), 0);
-    const averageViews = Math.round(totalViews / Math.max(1, resolvedVideos.length));
-
-    state.channel = {
+    return syncIngestedChannelToClientState({
       name: resolvedName,
       handle: resolvedHandle,
       niche: resolvedNiche,
       subscribers: resolvedSubscribers,
-      totalViews,
-      averageViews,
-      videosAnalyzed: resolvedVideos.length,
-      topTopic: resolvedVideos[0]?.topic || "Core",
-      strongestFormat: "Practical tutorial",
       dataMode,
-      topics: deriveTopicsFromVideos(resolvedVideos),
       videos: resolvedVideos,
-    };
-
-    state.pulse.baselineViews = averageViews;
-    state.pulse.creatorName = resolvedName;
-    state.pulse.headline = `Channel intelligence updated for ${resolvedName}.`;
-    state.pulse.trend = "+24% vs. previous period";
-    state.opportunities = deriveOpportunitiesForChannel(state.channel);
-    state.pulse.recommended = state.opportunities[0];
-
-    if (state.settings) {
-      state.settings.name = resolvedName;
-      state.settings.niche = resolvedNiche;
-    }
-
-    state.activity.unshift({
-      id: `act-${Date.now()}`,
-      agent: "Channel Brain",
-      action: "Ingested live channel catalog",
-      detail: `Swapped catalog to ${resolvedName} (${resolvedHandle}) · ${resolvedVideos.length} public videos analyzed`,
-      timestamp: "Just now",
-      status: "complete",
     });
-
-    saveClientState(state);
-    return state.channel;
   }
 
   // Channel Reset to 42-video Alex Rivera Demo

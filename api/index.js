@@ -161,7 +161,135 @@ export default async function handler(req, res) {
   if (url.includes("/api/channel/ingest")) {
     try {
       const body = typeof req.body === "string" ? JSON.parse(req.body) : (req.body || {});
-      const channelInput = body.channelUrlOrHandle || "@fireship";
+      const channelInput = (body.channelUrlOrHandle || "@fireship").trim();
+      const cleanKey = channelInput.toLowerCase().replace(/^https?:\/\/(www\.)?youtube\.com\//, "").replace(/^\/?@?/, "");
+
+      // 1. Mock Presets for offline evaluation
+      if (cleanKey.includes("buildwithalex") || cleanKey.includes("alex")) {
+        res.status(200).json({
+          name: "Alex Rivera",
+          handle: "@buildwithalex",
+          niche: "AI engineering and developer tools",
+          subscribers: 142000,
+          dataMode: "Evaluation Mock Catalog · 42 synthetic videos for offline testing",
+          videos: [
+            {
+              id: "alex-v1",
+              title: "Why AI agents work in a demo but fail in production",
+              topic: "AI agents",
+              format: "Practical tutorial",
+              views: 81200,
+              engagementRate: 8.9,
+              publishedAt: "2026-08-15",
+              duration: "14:22",
+              hook: "Can modern AI actually build a full-stack SaaS before your coffee gets cold?",
+            },
+            {
+              id: "alex-v2",
+              title: "The MCP architecture I wish I had started with",
+              topic: "Developer workflows",
+              format: "Deep dive",
+              views: 64500,
+              engagementRate: 9.1,
+              publishedAt: "2026-07-28",
+              duration: "18:40",
+              hook: "Stop building custom agent tool wrappers when Model Context Protocol standardizes it.",
+            },
+            {
+              id: "alex-v3",
+              title: "5 vector search mistakes every engineer makes",
+              topic: "Retrieval systems",
+              format: "Listicle",
+              views: 52300,
+              engagementRate: 7.8,
+              publishedAt: "2026-07-10",
+              duration: "12:15",
+              hook: "Cosine similarity won't save you if your chunking strategy is flawed.",
+            },
+            {
+              id: "alex-v4",
+              title: "Building an evaluation pipeline for LLM agents",
+              topic: "AI agents",
+              format: "Practical tutorial",
+              views: 94100,
+              engagementRate: 9.4,
+              publishedAt: "2026-06-22",
+              duration: "16:50",
+              hook: "Without deterministic assertions, your agent deployment is just gambling.",
+            },
+          ],
+          topics: [
+            { name: "AI agents", views: 175300, performance: "Excellent", audienceFit: 96, saturation: 42 },
+            { name: "Developer workflows", views: 64500, performance: "Strong", audienceFit: 88, saturation: 30 },
+            { name: "Retrieval systems", views: 52300, performance: "Strong", audienceFit: 84, saturation: 28 },
+          ],
+        });
+        return;
+      }
+
+      if (cleanKey.includes("sarahcodes") || cleanKey.includes("sarah")) {
+        res.status(200).json({
+          name: "Sarah Connor",
+          handle: "@sarahcodes",
+          niche: "Cloud architecture & cybersecurity",
+          subscribers: 89000,
+          dataMode: "Evaluation Mock Catalog · Cybersecurity & Cloud",
+          videos: [
+            {
+              id: "sarah-v1",
+              title: "Zero Trust Architecture: The Practical Implementation Guide",
+              topic: "Zero Trust & Security",
+              format: "Practical tutorial",
+              views: 76400,
+              engagementRate: 8.7,
+              publishedAt: "2026-08-19",
+              duration: "16:10",
+              hook: "Perimeter security is dead. Here is how we verify every packet in 2026.",
+            },
+            {
+              id: "sarah-v2",
+              title: "How I Exploited a Misconfigured Kubernetes Cluster",
+              topic: "Cloud Penetration Testing",
+              format: "Deep dive",
+              views: 112000,
+              engagementRate: 9.6,
+              publishedAt: "2026-07-30",
+              duration: "21:40",
+              hook: "One default service account token was all it took to achieve cluster admin.",
+            },
+            {
+              id: "sarah-v3",
+              title: "AWS IAM Privilege Escalation: 5 Real-World Scenarios",
+              topic: "Cloud Security",
+              format: "Listicle",
+              views: 58900,
+              engagementRate: 8.2,
+              publishedAt: "2026-07-14",
+              duration: "13:25",
+              hook: "Most dev teams don't realize these wildcard permissions allow root escalation.",
+            },
+            {
+              id: "sarah-v4",
+              title: "CI/CD Pipeline Security: Hardening GitHub Actions in Production",
+              topic: "Cloud Security",
+              format: "Practical tutorial",
+              views: 84300,
+              engagementRate: 9.1,
+              publishedAt: "2026-06-25",
+              duration: "15:30",
+              hook: "Dependency confusion and unpinned actions are leaking production secrets daily.",
+            },
+          ],
+          topics: [
+            { name: "Zero Trust & Security", views: 76400, performance: "Strong", audienceFit: 92, saturation: 36 },
+            { name: "Cloud Penetration Testing", views: 112000, performance: "Excellent", audienceFit: 97, saturation: 40 },
+            { name: "Cloud Security", views: 143200, performance: "Strong", audienceFit: 88, saturation: 32 },
+          ],
+        });
+        return;
+      }
+
+      // 2. Real YouTube Live Ingestion
       try {
         const liveData = await fetchLiveYouTubeCatalog(channelInput);
         res.status(200).json(liveData);
@@ -253,5 +381,12 @@ export default async function handler(req, res) {
     return;
   }
 
-  res.status(200).json({ status: "ok", message: "CreatorPulse Serverless API Online" });
+  if (url.includes("/api/healthz")) {
+    res.status(200).json({ status: "ok" });
+    return;
+  }
+
+  // All other API routes (pulse, channel, opportunities, content, memory, activity, settings)
+  // are managed in client state engine. Return 404 so customFetch falls back seamlessly.
+  res.status(404).json({ error: `Not handled by serverless API; handled by client engine: ${url}` });
 }
