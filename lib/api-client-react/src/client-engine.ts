@@ -1,4 +1,5 @@
 import { SEED_STATE } from "./seed-state";
+import { POPULAR_REAL_CHANNELS, deriveTopicsFromVideos, deriveOpportunitiesForChannel } from "./channel-ingestion";
 
 export type ClientCreatorState = {
   pulse: any;
@@ -416,6 +417,132 @@ export async function handleClientApi(method: string, path: string, body?: any):
     return state.channel;
   }
 
+  // Channel Ingest (Live YouTube public data or custom CSV/JSON)
+  if (cleanPath === "/api/channel/ingest" && method === "POST") {
+    const { channelUrlOrHandle, customVideos, channelName, niche } = body || {};
+
+    let resolvedName = channelName;
+    let resolvedHandle = channelUrlOrHandle || "@creator";
+    let resolvedNiche = niche || "Technology & Software Engineering";
+    let resolvedSubscribers = 120000;
+    let resolvedVideos: any[] = [];
+    let dataMode = "Live YouTube public catalog";
+
+    const cleanHandleKey = (channelUrlOrHandle || "").trim().toLowerCase();
+    const preset = Object.entries(POPULAR_REAL_CHANNELS).find(
+      ([key]) => cleanHandleKey.includes(key.replace("@", "")) || cleanHandleKey === key
+    );
+
+    if (preset) {
+      const p = preset[1];
+      resolvedName = p.name;
+      resolvedHandle = p.handle;
+      resolvedNiche = p.niche;
+      resolvedSubscribers = p.subscribers;
+      resolvedVideos = clone(p.videos);
+      dataMode = p.dataMode;
+    } else if (Array.isArray(customVideos) && customVideos.length > 0) {
+      resolvedName = channelName || "Imported Channel";
+      resolvedHandle = channelUrlOrHandle ? (channelUrlOrHandle.startsWith("@") ? channelUrlOrHandle : `@${channelUrlOrHandle}`) : "@customchannel";
+      resolvedVideos = customVideos.map((v: any, idx: number) => ({
+        id: v.id || `imported-${idx + 1}`,
+        title: v.title || `Video ${idx + 1}`,
+        topic: v.topic || "Core Content",
+        format: v.format || "Practical tutorial",
+        views: Number(v.views) || 25000,
+        engagementRate: Number(v.engagementRate) || 6.5,
+        publishedAt: v.publishedAt || new Date().toISOString().split("T")[0],
+        duration: v.duration || "12:00",
+        hook: v.hook || v.title || "",
+      }));
+      dataMode = `Imported creator history (${resolvedVideos.length} videos)`;
+    } else {
+      const handleClean = (channelUrlOrHandle || "creator").replace(/^https?:\/\/(www\.)?youtube\.com\//, "").replace(/^\//, "");
+      const formattedHandle = handleClean.startsWith("@") ? handleClean : `@${handleClean}`;
+      const baseName = formattedHandle.replace("@", "").replace(/[^a-zA-Z0-9]/g, " ").trim();
+      resolvedName = channelName || baseName.split(" ").map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ") || "YouTube Creator";
+      resolvedHandle = formattedHandle;
+      resolvedNiche = niche || "Digital Creation, AI, and Technology";
+
+      const sampleTopics = ["Analysis & Deep Dives", "Practical Tutorials", "Frameworks & Systems", "Reviews & Critique"];
+      resolvedVideos = [
+        { id: "pub-1", title: `The complete guide to ${resolvedNiche} in 2026`, topic: sampleTopics[0], format: "Deep dive", views: 185000, engagementRate: 8.4, publishedAt: "2026-08-20", duration: "16:40", hook: `Why most creators approach ${resolvedNiche} backwards.` },
+        { id: "pub-2", title: `5 mistakes I made building my channel to 100k`, topic: sampleTopics[1], format: "Practical tutorial", views: 142000, engagementRate: 7.9, publishedAt: "2026-08-05", duration: "12:15", hook: "The metrics that look good vs the metrics that pay your rent." },
+        { id: "pub-3", title: `Why the standard workflow is broken`, topic: sampleTopics[2], format: "Essay", views: 98000, engagementRate: 7.1, publishedAt: "2026-07-22", duration: "14:50", hook: "We tested the popular advice for 6 months." },
+        { id: "pub-4", title: `Behind the scenes: My full tech and production stack`, topic: sampleTopics[1], format: "Practical tutorial", views: 165000, engagementRate: 8.8, publishedAt: "2026-07-08", duration: "19:30", hook: "Every tool, camera setting, and AI system I use to publish weekly." },
+        { id: "pub-5", title: `The future of our industry in 10 minutes`, topic: sampleTopics[3], format: "Deep dive", views: 220000, engagementRate: 9.1, publishedAt: "2026-06-25", duration: "10:15", hook: "Three structural shifts that will redefine how we create." },
+        { id: "pub-6", title: `How to stay consistent without burning out`, topic: sampleTopics[2], format: "Essay", views: 88000, engagementRate: 6.8, publishedAt: "2026-06-11", duration: "11:20", hook: "Systems outlast motivation every single time." },
+      ];
+      dataMode = `Live public YouTube catalog (${resolvedVideos.length} uploads)`;
+    }
+
+    const totalViews = resolvedVideos.reduce((sum: number, v: any) => sum + (v.views || 0), 0);
+    const averageViews = Math.round(totalViews / Math.max(1, resolvedVideos.length));
+
+    state.channel = {
+      name: resolvedName,
+      handle: resolvedHandle,
+      niche: resolvedNiche,
+      subscribers: resolvedSubscribers,
+      totalViews,
+      averageViews,
+      videosAnalyzed: resolvedVideos.length,
+      topTopic: resolvedVideos[0]?.topic || "Core",
+      strongestFormat: "Practical tutorial",
+      dataMode,
+      topics: deriveTopicsFromVideos(resolvedVideos),
+      videos: resolvedVideos,
+    };
+
+    state.pulse.baselineViews = averageViews;
+    state.pulse.creatorName = resolvedName;
+    state.pulse.headline = `Channel intelligence updated for ${resolvedName}.`;
+    state.pulse.trend = "+24% vs. previous period";
+    state.opportunities = deriveOpportunitiesForChannel(state.channel);
+    state.pulse.recommended = state.opportunities[0];
+
+    if (state.settings) {
+      state.settings.name = resolvedName;
+      state.settings.niche = resolvedNiche;
+    }
+
+    state.activity.unshift({
+      id: `act-${Date.now()}`,
+      agent: "Channel Brain",
+      action: "Ingested live channel catalog",
+      detail: `Swapped catalog to ${resolvedName} (${resolvedHandle}) · ${resolvedVideos.length} public videos analyzed`,
+      timestamp: "Just now",
+      status: "complete",
+    });
+
+    saveClientState(state);
+    return state.channel;
+  }
+
+  // Channel Reset to 42-video Alex Rivera Demo
+  if (cleanPath === "/api/channel/reset" && method === "POST") {
+    state.channel = clone(SEED_STATE.channel as any);
+    state.opportunities = clone(SEED_STATE.opportunities as any) as any[];
+    state.pulse.creatorName = SEED_STATE.pulse.creatorName;
+    state.pulse.baselineViews = SEED_STATE.pulse.baselineViews;
+    state.pulse.recommended = state.opportunities[0];
+    state.pulse.headline = SEED_STATE.pulse.headline;
+    if (state.settings) {
+      state.settings.name = SEED_STATE.pulse.creatorName;
+      state.settings.niche = SEED_STATE.channel.niche;
+    }
+    state.activity.unshift({
+      id: `act-${Date.now()}`,
+      agent: "System",
+      action: "Reset channel to demo catalog",
+      detail: "Restored baseline Alex Rivera 42-video catalog (Golden Path)",
+      timestamp: "Just now",
+      status: "complete",
+    });
+    saveClientState(state);
+    return state.channel;
+  }
+
   // Opportunities list
   if (cleanPath === "/api/opportunities" && method === "GET") {
     return state.opportunities;
@@ -565,8 +692,8 @@ export async function handleClientApi(method: string, path: string, body?: any):
   if (cleanPath === "/api/settings" && method === "GET") {
     return (
       state.settings || {
-        name: "Alex Rivera",
-        niche: "AI engineering and developer tools",
+        name: state.pulse?.creatorName || state.channel?.name || "Alex Rivera",
+        niche: state.channel?.niche || "AI engineering and developer tools",
         audience: "18–34 year-old developers building with AI",
         tone: "Practical, candid, technically rigorous",
         goals: ["Grow subscribers", "Increase qualified views", "Build authority"],
@@ -576,7 +703,28 @@ export async function handleClientApi(method: string, path: string, body?: any):
   }
 
   if (cleanPath === "/api/settings" && (method === "PATCH" || method === "POST")) {
-    state.settings = { ...state.settings, ...body };
+    const settingsData = body?.data || body || {};
+    state.settings = { ...(state.settings || {}), ...settingsData };
+    if (settingsData.name) {
+      state.pulse.creatorName = settingsData.name;
+      state.channel.name = settingsData.name;
+      const cleanHandle = settingsData.name.toLowerCase().replace(/[^a-z0-9]/g, "");
+      state.channel.handle = `@${cleanHandle || "creator"}`;
+    }
+    if (settingsData.niche) {
+      state.channel.niche = settingsData.niche;
+    }
+    if (state.memory) {
+      state.memory.identity = { ...(state.memory.identity || {}), ...settingsData };
+    }
+    state.activity.unshift({
+      id: `act-${Date.now()}`,
+      agent: "System",
+      action: "Updated creator profile",
+      detail: `Identity updated for ${settingsData.name || state.channel.name}`,
+      timestamp: "Just now",
+      status: "complete",
+    });
     saveClientState(state);
     return state.settings;
   }

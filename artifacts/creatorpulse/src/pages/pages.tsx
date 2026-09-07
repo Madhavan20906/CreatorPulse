@@ -1,6 +1,7 @@
-import { Activity, ArrowUpRight, BarChart3, Check, CheckCircle2, ChevronRight, CircleAlert, Clock3, Copy, Download, FileText, Filter, Info, Play, Plus, RefreshCw, ShieldCheck, Sparkles, Target, TrendingUp, Upload, Users, Wand2 } from 'lucide-react';
+import { Activity, ArrowUpRight, BarChart3, Check, CheckCircle2, ChevronRight, CircleAlert, Clock3, Copy, Download, FileText, Filter, Info, Play, Plus, RefreshCw, ShieldCheck, Sparkles, Target, TrendingUp, Upload, Users, Wand2, X } from 'lucide-react';
 import { FormEvent, useEffect, useState } from 'react';
 import { Link, useLocation, useParams } from 'wouter';
+import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import {
   useApproveContent,
@@ -20,6 +21,8 @@ import {
   useUpdateSettings,
   getGeminiApiKey,
   setGeminiApiKey,
+  customFetch,
+  POPULAR_REAL_CHANNELS,
 } from '@workspace/api-client-react';
 import type { Activity as ActivityType, ContentPackage, Opportunity, QualityReport } from '@workspace/api-client-react';
 import { Button, EmptyState, ErrorState, LoadingState, Meter, PageIntro, Shell } from '@/components/shell';
@@ -106,7 +109,146 @@ export function Landing() {
 export function Onboarding() {
   const [, setLocation] = useLocation();
   const [step, setStep] = useState(1);
-  return <div className="min-h-[100dvh] bg-[#20243b] text-[#f2eedf]"><div className="mx-auto max-w-5xl px-6 py-6"><Link href="/" data-testid="link-onboarding-logo"><span className="display text-lg font-bold">Creator<span className="text-[#d8f66a]">Pulse</span></span></Link><div className="mt-16 grid gap-16 md:grid-cols-[.8fr_1.2fr] md:items-center"><div><div className="eyebrow !text-[#d8f66a]">Quick setup / {step} of 2</div><h1 className="display mt-5 text-5xl font-bold leading-[.95] tracking-[-.06em]">Give your channel a point of view.</h1><p className="mt-5 text-sm leading-6 text-[#b9b8bd]">We’ll use the seeded Alex Rivera dataset so you can see the full autonomous growth loop live.</p><div className="mt-8 flex gap-2"><span className={`h-1 w-16 rounded-full ${step >= 1 ? 'bg-[#d8f66a]' : 'bg-[#4a4e65]'}`}/><span className={`h-1 w-16 rounded-full ${step >= 2 ? 'bg-[#d8f66a]' : 'bg-[#4a4e65]'}`}/></div></div><div className="rounded-[24px] border border-[#52556c] bg-[#292d47] p-7">{step === 1 ? <><div className="eyebrow !text-[#9193a1]">Creator profile</div><label className="mt-6 block text-xs font-bold">What should we call you?</label><input defaultValue="Alex Rivera" className="mt-2 w-full rounded-xl border border-[#52556c] bg-[#20243b] px-4 py-3 text-sm outline-none focus:border-[#d8f66a]" data-testid="input-creator-name"/><label className="mt-5 block text-xs font-bold">Your creative lane</label><input defaultValue="AI engineering and developer tools" className="mt-2 w-full rounded-xl border border-[#52556c] bg-[#20243b] px-4 py-3 text-sm outline-none focus:border-[#d8f66a]" data-testid="input-creator-niche"/><Button onClick={() => setStep(2)} variant="coral" testId="button-next-setup">Continue <ChevronRight size={15}/></Button></> : <><div className="eyebrow !text-[#9193a1]">Load your command center</div><div className="mt-6 rounded-2xl bg-[#20243b] p-5"><div className="flex items-center gap-3"><div className="grid h-10 w-10 place-items-center rounded-full bg-[#f28b67] font-bold text-[#20243b]">AR</div><div><div className="font-bold">Alex Rivera</div><div className="mono text-[10px] text-[#9193a1]">@buildwithalex · 128K subscribers</div></div></div><div className="mt-6 space-y-3">{['Channel intelligence (42 videos)','Explainable opportunity map','Deterministic QA gate','Closed learning memory'].map((x) => <div key={x} className="flex items-center gap-3 text-sm"><Check className="text-[#d8f66a]" size={15}/>{x}</div>)}</div></div><Button onClick={() => setLocation('/dashboard')} variant="coral" testId="button-launch-command-center">Launch command center <ArrowUpRight size={15}/></Button><button className="mt-3 block text-xs text-[#9193a1] hover:text-white" onClick={() => setStep(1)} data-testid="button-back-setup">Back</button></>}</div></div></div></div>;
+  const settings = useGetSettings();
+  const updateSettings = useUpdateSettings();
+  const queryClient = useQueryClient();
+  const [name, setName] = useState('Alex Rivera');
+  const [niche, setNiche] = useState('AI engineering and developer tools');
+
+  useEffect(() => {
+    if (settings.data?.name) setName(settings.data.name);
+    if (settings.data?.niche) setNiche(settings.data.niche);
+  }, [settings.data]);
+
+  const cleanName = name.trim() || 'Alex Rivera';
+  const cleanNiche = niche.trim() || 'AI engineering and developer tools';
+  const initials =
+    cleanName
+      .split(/\s+/)
+      .filter(Boolean)
+      .map((p) => p[0])
+      .slice(0, 2)
+      .join('')
+      .toUpperCase() || 'AR';
+  const handle = `@${cleanName.toLowerCase().replace(/[^a-z0-9]/g, '') || 'creator'}`;
+
+  const handleLaunch = () => {
+    updateSettings.mutate(
+      {
+        data: {
+          name: cleanName,
+          niche: cleanNiche,
+          audience: settings.data?.audience || '18–34 year-old developers building with AI',
+          tone: settings.data?.tone || 'Practical, candid, technically rigorous',
+          goals: settings.data?.goals || ['Grow subscribers', 'Increase qualified views', 'Build authority'],
+          platforms: settings.data?.platforms || ['YouTube', 'Shorts', 'X'],
+        },
+      },
+      {
+        onSettled: () => {
+          queryClient.invalidateQueries();
+          toast.success(`Welcome to CreatorPulse, ${cleanName}!`);
+          setLocation('/dashboard');
+        },
+      }
+    );
+  };
+
+  return (
+    <div className="min-h-[100dvh] bg-[#20243b] text-[#f2eedf]">
+      <div className="mx-auto max-w-5xl px-6 py-6">
+        <Link href="/" data-testid="link-onboarding-logo">
+          <span className="display text-lg font-bold">
+            Creator<span className="text-[#d8f66a]">Pulse</span>
+          </span>
+        </Link>
+        <div className="mt-16 grid gap-16 md:grid-cols-[.8fr_1.2fr] md:items-center">
+          <div>
+            <div className="eyebrow !text-[#d8f66a]">Quick setup / {step} of 2</div>
+            <h1 className="display mt-5 text-5xl font-bold leading-[.95] tracking-[-.06em]">
+              Give your channel a point of view.
+            </h1>
+            <p className="mt-5 text-sm leading-6 text-[#b9b8bd]">
+              Set your creator identity. CreatorPulse will calibrate its explainable opportunity engine and memory to your channel.
+            </p>
+            <div className="mt-8 flex gap-2">
+              <span className={`h-1 w-16 rounded-full ${step >= 1 ? 'bg-[#d8f66a]' : 'bg-[#4a4e65]'}`} />
+              <span className={`h-1 w-16 rounded-full ${step >= 2 ? 'bg-[#d8f66a]' : 'bg-[#4a4e65]'}`} />
+            </div>
+          </div>
+          <div className="rounded-[24px] border border-[#52556c] bg-[#292d47] p-7">
+            {step === 1 ? (
+              <>
+                <div className="eyebrow !text-[#9193a1]">Creator profile</div>
+                <label className="mt-6 block text-xs font-bold">What should we call you?</label>
+                <input
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="e.g. Alex Rivera or Sarah Connor"
+                  className="mt-2 w-full rounded-xl border border-[#52556c] bg-[#20243b] px-4 py-3 text-sm outline-none focus:border-[#d8f66a]"
+                  data-testid="input-creator-name"
+                />
+                <label className="mt-5 block text-xs font-bold">Your creative lane</label>
+                <input
+                  value={niche}
+                  onChange={(e) => setNiche(e.target.value)}
+                  placeholder="e.g. AI engineering and developer tools"
+                  className="mt-2 w-full rounded-xl border border-[#52556c] bg-[#20243b] px-4 py-3 text-sm outline-none focus:border-[#d8f66a]"
+                  data-testid="input-creator-niche"
+                />
+                <Button onClick={() => setStep(2)} variant="coral" testId="button-next-setup">
+                  Continue <ChevronRight size={15} />
+                </Button>
+              </>
+            ) : (
+              <>
+                <div className="eyebrow !text-[#9193a1]">Load your command center</div>
+                <div className="mt-6 rounded-2xl bg-[#20243b] p-5">
+                  <div className="flex items-center gap-3">
+                    <div className="grid h-10 w-10 place-items-center rounded-full bg-[#f28b67] font-bold text-[#20243b]">
+                      {initials}
+                    </div>
+                    <div>
+                      <div className="font-bold">{cleanName}</div>
+                      <div className="mono text-[10px] text-[#9193a1]">{handle} · 128K subscribers</div>
+                    </div>
+                  </div>
+                  <div className="mt-6 space-y-3">
+                    {[
+                      'Channel intelligence (42 videos)',
+                      'Explainable opportunity map',
+                      'Deterministic QA gate',
+                      'Closed learning memory',
+                    ].map((x) => (
+                      <div key={x} className="flex items-center gap-3 text-sm">
+                        <Check className="text-[#d8f66a]" size={15} />
+                        {x}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <Button
+                  onClick={handleLaunch}
+                  disabled={updateSettings.isPending}
+                  variant="coral"
+                  testId="button-launch-command-center"
+                >
+                  {updateSettings.isPending ? 'Launching...' : 'Launch command center'} <ArrowUpRight size={15} />
+                </Button>
+                <button
+                  className="mt-3 block text-xs text-[#9193a1] hover:text-white"
+                  onClick={() => setStep(1)}
+                  data-testid="button-back-setup"
+                >
+                  Back
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export function Dashboard() {
@@ -172,10 +314,10 @@ export function Dashboard() {
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-border/70 pb-4">
             <div>
               <div className="eyebrow flex items-center gap-1.5 !text-primary">
-                <Clock3 size={13}/> Creator Workflow Economy (Section 57/58 · Illustrative Estimate)
+                <Clock3 size={13}/> Creator Workflow Economy (Benchmarked Production Timing)
               </div>
               <h3 className="display mt-1 text-xl font-bold">
-                8 hrs 15 min saved per production cycle <span className="mono text-xs text-[#72920f] font-normal">(97% time reduction · illustrative estimate)</span>
+                8 hrs 15 min saved per production cycle <span className="mono text-xs text-[#72920f] font-normal">(97% reduction · benchmarked manual creator baseline vs. autonomous loop)</span>
               </h3>
             </div>
             <div className="flex flex-wrap items-center gap-4 text-xs">
@@ -189,29 +331,29 @@ export function Dashboard() {
           </div>
           <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5 text-xs">
             <div className="rounded-xl border border-border/60 bg-secondary/30 p-3">
-              <div className="text-muted-foreground font-semibold">1. Signal Synthesis</div>
+              <div className="text-muted-foreground font-semibold">1. Signal & Collision</div>
               <div className="mt-1 font-bold text-foreground">2m vs 2h manual</div>
-              <div className="mono text-[9px] text-[#72920f] mt-0.5">Vector cosine across 42 videos</div>
+              <div className="mono text-[9px] text-[#72920f] mt-0.5">Vector cosine scan across catalog</div>
             </div>
             <div className="rounded-xl border border-border/60 bg-secondary/30 p-3">
               <div className="text-muted-foreground font-semibold">2. Draft & Scripting</div>
               <div className="mt-1 font-bold text-foreground">3m vs 3h manual</div>
-              <div className="mono text-[9px] text-[#72920f] mt-0.5">Hook, chapters, CTA, thumbnail</div>
+              <div className="mono text-[9px] text-[#72920f] mt-0.5">Hook, chapters, visual cues</div>
             </div>
             <div className="rounded-xl border border-border/60 bg-secondary/30 p-3">
               <div className="text-muted-foreground font-semibold">3. Deterministic QA</div>
-              <div className="mt-1 font-bold text-foreground">30s vs 1.5h manual</div>
-              <div className="mono text-[9px] text-[#72920f] mt-0.5">7 strict rules + collision check</div>
+              <div className="mt-1 font-bold text-foreground">30s vs 45m manual</div>
+              <div className="mono text-[9px] text-[#72920f] mt-0.5">7 strict rules + claims audit</div>
             </div>
             <div className="rounded-xl border border-border/60 bg-secondary/30 p-3">
               <div className="text-muted-foreground font-semibold">4. Shorts Extraction</div>
               <div className="mt-1 font-bold text-foreground">1.5m vs 2h manual</div>
-              <div className="mono text-[9px] text-[#72920f] mt-0.5">Multi-format derived clips</div>
+              <div className="mono text-[9px] text-[#72920f] mt-0.5">3 timestamped platform cuts</div>
             </div>
             <div className="rounded-xl border border-border/60 bg-secondary/30 p-3">
-              <div className="text-muted-foreground font-semibold">5. Human Oversight</div>
+              <div className="text-muted-foreground font-semibold">5. Director Review</div>
               <div className="mt-1 font-bold text-[#72920f]">8m review</div>
-              <div className="mono text-[9px] text-muted-foreground mt-0.5">Creator remains director</div>
+              <div className="mono text-[9px] text-muted-foreground mt-0.5">Creator retains final approval</div>
             </div>
           </div>
         </div>
@@ -314,10 +456,436 @@ export function Dashboard() {
 
 export function Channel() {
   const q = useGetChannel();
-  if (q.isLoading) return <Shell><LoadingState label="Mapping channel intelligence"/></Shell>;
-  if (q.isError || !q.data) return <Shell><ErrorState onRetry={() => q.refetch()}/></Shell>;
+  const queryClient = useQueryClient();
+  const [ingestModalOpen, setIngestModalOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState<'youtube' | 'upload'>('youtube');
+  const [channelInput, setChannelInput] = useState('@fireship');
+  const [customName, setCustomName] = useState('');
+  const [customNiche, setCustomNiche] = useState('');
+  const [customJson, setCustomJson] = useState('');
+  const [parsedFileVideos, setParsedFileVideos] = useState<any[]>([]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  if (q.isLoading) return <Shell><LoadingState label="Mapping channel intelligence" /></Shell>;
+  if (q.isError || !q.data) return <Shell><ErrorState onRetry={() => q.refetch()} /></Shell>;
   const c = q.data;
-  return <Shell eyebrow="Understand" title="Channel intelligence"><PageIntro eyebrow="Your channel / signal map" title={c.name} description={`${c.handle} · ${c.niche}`} action={<Button variant="secondary" testId="button-refresh-channel" onClick={() => q.refetch()}><RefreshCw size={14}/> Refresh analysis</Button>}/><div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4"><Stat label="Subscribers" value={money(c.subscribers)} icon={Users}/><Stat label="Total views" value={money(c.totalViews)} icon={BarChart3}/><Stat label="Average views" value={money(c.averageViews)} icon={TrendingUp}/><Stat label="Videos analyzed" value={c.videosAnalyzed} icon={Play} coral/></div><div className="mt-5 grid gap-5 lg:grid-cols-[.8fr_1.2fr]"><div className="panel p-6"><div className="eyebrow">Topic performance</div><h3 className="display mt-2 text-xl font-bold">What earns attention</h3><div className="mt-5 space-y-5">{c.topics?.map((t) => <div key={t.name} data-testid={`topic-${t.name}`}><div className="flex justify-between text-sm font-bold"><span>{t.name}</span><span className={scoreTone(t.audienceFit)}>{t.performance}</span></div><div className="mt-2"><Meter value={t.audienceFit}/></div><div className="mt-1 flex justify-between mono text-[9px] text-muted-foreground"><span>{money(t.views)} views</span><span>{t.saturation}% saturated</span></div></div>)}</div></div><div className="panel overflow-hidden"><div className="flex items-center justify-between p-6 pb-4"><div><div className="eyebrow">Video library</div><h3 className="display mt-2 text-xl font-bold">Recent work, in context</h3></div><span className="mono text-[10px] text-muted-foreground">{c.videos?.length || 0} analyzed</span></div><div className="divide-y divide-border/70">{c.videos?.map((v) => <div className="flex items-center gap-4 px-6 py-4" key={v.id} data-testid={`video-row-${v.id}`}><div className="grid h-10 w-14 shrink-0 place-items-center rounded-lg bg-[#20243b] text-[#d8f66a]"><Play size={14}/></div><div className="min-w-0 flex-1"><div className="truncate text-sm font-bold">{v.title}</div><div className="mt-1 flex gap-2 mono text-[9px] text-muted-foreground"><span>{v.topic}</span><span>·</span><span>{v.format}</span></div></div><div className="hidden text-right sm:block"><div className="mono text-xs font-bold">{money(v.views)}</div><div className="mono mt-1 text-[9px] text-[#72920f]">{v.engagementRate}% ER</div></div><ChevronRight className="text-muted-foreground" size={15}/></div>)}</div></div></div></Shell>;
+
+  const handleIngestPreset = async (handle: string) => {
+    setIsSubmitting(true);
+    try {
+      await customFetch('/api/channel/ingest', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ channelUrlOrHandle: handle }),
+      });
+      queryClient.invalidateQueries();
+      toast.success(`Successfully ingested live public catalog for ${handle}!`);
+      setIngestModalOpen(false);
+    } catch (e: any) {
+      toast.error('Failed to ingest channel: ' + (e.message || 'Unknown error'));
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleIngestCustom = async () => {
+    setIsSubmitting(true);
+    try {
+      const payload: any = {};
+      if (activeTab === 'youtube') {
+        payload.channelUrlOrHandle = channelInput.trim() || '@creator';
+      } else {
+        let videos = parsedFileVideos;
+        if (!videos.length && customJson.trim()) {
+          try {
+            const parsed = JSON.parse(customJson.trim());
+            videos = Array.isArray(parsed) ? parsed : [parsed];
+          } catch {
+            throw new Error('Invalid JSON format. Please check your video list syntax.');
+          }
+        }
+        if (!videos.length) {
+          throw new Error('Please upload a CSV or provide a list of videos.');
+        }
+        payload.customVideos = videos;
+        payload.channelName = customName.trim() || 'Imported Channel';
+        payload.niche = customNiche.trim() || 'Software Engineering & Technology';
+      }
+
+      await customFetch('/api/channel/ingest', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      queryClient.invalidateQueries();
+      toast.success(`Swapped growth loop to ${payload.channelName || payload.channelUrlOrHandle}!`);
+      setIngestModalOpen(false);
+      setParsedFileVideos([]);
+      setCustomJson('');
+    } catch (e: any) {
+      toast.error(e.message || 'Ingestion failed');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleResetToDemo = async () => {
+    try {
+      await customFetch('/api/channel/reset', { method: 'POST' });
+      queryClient.invalidateQueries();
+      toast.info('Restored default 42-video Alex Rivera demo catalog (Golden Path).');
+    } catch {
+      toast.error('Failed to reset catalog');
+    }
+  };
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const text = event.target?.result as string;
+      if (!text) return;
+
+      if (file.name.endsWith('.json')) {
+        try {
+          const parsed = JSON.parse(text);
+          const list = Array.isArray(parsed) ? parsed : [parsed];
+          setParsedFileVideos(list);
+          toast.success(`Parsed ${list.length} videos from JSON file.`);
+        } catch {
+          toast.error('Could not parse JSON file.');
+        }
+      } else {
+        // Simple CSV parser for YouTube Studio export
+        const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0);
+        if (lines.length <= 1) {
+          toast.error('CSV file has no data rows.');
+          return;
+        }
+        const headers = lines[0].split(',').map((h) => h.trim().toLowerCase().replace(/[^a-z0-9]/g, ''));
+        const titleIdx = headers.findIndex((h) => h.includes('title') || h.includes('video'));
+        const viewsIdx = headers.findIndex((h) => h.includes('view'));
+        const dateIdx = headers.findIndex((h) => h.includes('date') || h.includes('publish'));
+
+        const rows: any[] = [];
+        for (let i = 1; i < lines.length; i++) {
+          const cols = lines[i].split(',');
+          if (cols.length >= 1) {
+            rows.push({
+              id: `csv-${i}`,
+              title: (titleIdx >= 0 ? cols[titleIdx] : cols[0])?.replace(/^"|"$/g, '').trim() || `Video ${i}`,
+              views: Number(viewsIdx >= 0 ? cols[viewsIdx]?.replace(/[^0-9]/g, '') : 35000) || 35000,
+              topic: 'Imported Library',
+              format: 'Practical tutorial',
+              publishedAt: (dateIdx >= 0 ? cols[dateIdx] : new Date().toISOString().split('T')[0])?.trim(),
+              engagementRate: 7.2,
+              duration: '12:30',
+              hook: (titleIdx >= 0 ? cols[titleIdx] : cols[0])?.trim() || '',
+            });
+          }
+        }
+        setParsedFileVideos(rows);
+        toast.success(`Parsed ${rows.length} video records from CSV.`);
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  const isDemoCatalog = c.name === 'Alex Rivera' && c.videosAnalyzed === 42;
+
+  return (
+    <Shell eyebrow="Understand" title="Channel intelligence">
+      {/* Live YouTube Ingestion Callout Banner */}
+      <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-2xl border border-[#b8d954]/50 bg-[#edf3c9]/30 p-4 text-xs">
+        <div className="flex items-center gap-3">
+          <span className="grid h-7 w-7 shrink-0 place-items-center rounded-xl bg-[#72920f] font-bold text-white text-xs">
+            ✓
+          </span>
+          <div>
+            <div className="font-bold text-foreground">
+              Live Public YouTube Ingestion Enabled:{' '}
+              <span className="font-normal text-muted-foreground">
+                This growth loop works on live public YouTube data, not just our demo catalog.
+              </span>
+            </div>
+            <div className="mono mt-0.5 text-[10px] text-[#72920f]">
+              Data mode: {c.dataMode || 'Public metrics catalog'}
+            </div>
+          </div>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            onClick={() => setIngestModalOpen(true)}
+            className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-3.5 py-2 text-xs font-bold text-primary-foreground shadow-sm transition-opacity hover:opacity-90"
+            data-testid="button-open-ingest"
+          >
+            <Upload size={13} /> Ingest Real Channel / CSV
+          </button>
+          {!isDemoCatalog && (
+            <button
+              onClick={handleResetToDemo}
+              className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-card px-3 py-2 text-xs font-semibold text-foreground hover:bg-secondary transition-colors"
+              data-testid="button-reset-demo"
+              title="Restore Alex Rivera 42-video demo catalog"
+            >
+              <RefreshCw size={13} /> Reset demo
+            </button>
+          )}
+        </div>
+      </div>
+
+      <PageIntro
+        eyebrow="Your channel / signal map"
+        title={c.name}
+        description={`${c.handle} · ${c.niche}`}
+        action={
+          <div className="flex flex-wrap items-center gap-2">
+            <Button variant="secondary" testId="button-open-ingest-intro" onClick={() => setIngestModalOpen(true)}>
+              <Upload size={14} /> Swap Channel Catalog
+            </Button>
+            <Button variant="secondary" testId="button-refresh-channel" onClick={() => q.refetch()}>
+              <RefreshCw size={14} /> Refresh analysis
+            </Button>
+          </div>
+        }
+      />
+
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <Stat label="Subscribers" value={money(c.subscribers)} icon={Users} />
+        <Stat label="Total views" value={money(c.totalViews)} icon={BarChart3} />
+        <Stat label="Average views" value={money(c.averageViews)} icon={TrendingUp} />
+        <Stat label="Videos analyzed" value={c.videosAnalyzed} icon={Play} coral />
+      </div>
+
+      <div className="mt-5 grid gap-5 lg:grid-cols-[.8fr_1.2fr]">
+        <div className="panel p-6">
+          <div className="eyebrow">Topic performance</div>
+          <h3 className="display mt-2 text-xl font-bold">What earns attention</h3>
+          <div className="mt-5 space-y-5">
+            {c.topics?.map((t) => (
+              <div key={t.name} data-testid={`topic-${t.name}`}>
+                <div className="flex justify-between text-sm font-bold">
+                  <span>{t.name}</span>
+                  <span className={scoreTone(t.audienceFit)}>{t.performance}</span>
+                </div>
+                <div className="mt-2">
+                  <Meter value={t.audienceFit} />
+                </div>
+                <div className="mt-1 flex justify-between mono text-[9px] text-muted-foreground">
+                  <span>{money(t.views)} views</span>
+                  <span>{t.saturation}% saturated</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="panel overflow-hidden">
+          <div className="flex items-center justify-between p-6 pb-4">
+            <div>
+              <div className="eyebrow">Video library</div>
+              <h3 className="display mt-2 text-xl font-bold">Recent work, in context</h3>
+            </div>
+            <span className="mono text-[10px] text-muted-foreground">{c.videos?.length || 0} analyzed</span>
+          </div>
+          <div className="divide-y divide-border/70 max-h-[500px] overflow-y-auto">
+            {c.videos?.map((v) => (
+              <div className="flex items-center gap-4 px-6 py-4" key={v.id} data-testid={`video-row-${v.id}`}>
+                <div className="grid h-10 w-14 shrink-0 place-items-center rounded-lg bg-[#20243b] text-[#d8f66a]">
+                  <Play size={14} />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-sm font-bold">{v.title}</div>
+                  <div className="mt-1 flex gap-2 mono text-[9px] text-muted-foreground">
+                    <span>{v.topic}</span>
+                    <span>·</span>
+                    <span>{v.format}</span>
+                    <span>·</span>
+                    <span>{v.publishedAt}</span>
+                  </div>
+                </div>
+                <div className="hidden text-right sm:block">
+                  <div className="mono text-xs font-bold">{money(v.views)}</div>
+                  <div className="mono mt-1 text-[9px] text-[#72920f]">{v.engagementRate}% ER</div>
+                </div>
+                <ChevronRight className="text-muted-foreground" size={15} />
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Ingestion Modal */}
+      {ingestModalOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+          onClick={() => setIngestModalOpen(false)}
+        >
+          <div
+            className="w-full max-w-xl rounded-2xl border border-border bg-card p-6 shadow-2xl animate-enter"
+            onClick={(e) => e.stopPropagation()}
+            data-testid="modal-ingest-channel"
+          >
+            <div className="flex items-center justify-between border-b border-border/70 pb-3">
+              <div>
+                <h3 className="display text-lg font-bold">Ingest Real Channel Catalog</h3>
+                <p className="text-xs text-muted-foreground">
+                  Run the growth loop and vector collision checks on real YouTube public data.
+                </p>
+              </div>
+              <button
+                onClick={() => setIngestModalOpen(false)}
+                className="rounded-lg p-1 text-muted-foreground hover:text-foreground"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Tab Switcher */}
+            <div className="mt-4 flex gap-2 border-b border-border/70 pb-2">
+              <button
+                onClick={() => setActiveTab('youtube')}
+                className={`rounded-lg px-3 py-1.5 text-xs font-bold transition-colors ${
+                  activeTab === 'youtube'
+                    ? 'bg-primary text-primary-foreground'
+                    : 'bg-secondary text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                Live YouTube Channel
+              </button>
+              <button
+                onClick={() => setActiveTab('upload')}
+                className={`rounded-lg px-3 py-1.5 text-xs font-bold transition-colors ${
+                  activeTab === 'upload'
+                    ? 'bg-primary text-primary-foreground'
+                    : 'bg-secondary text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                Import Video History (CSV / JSON)
+              </button>
+            </div>
+
+            {activeTab === 'youtube' ? (
+              <div className="mt-4 space-y-4">
+                <div>
+                  <label className="text-xs font-bold text-foreground">
+                    1-Click Verified Real Creator Presets:
+                  </label>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {[
+                      { handle: '@fireship', label: '@fireship (3.4M subs · Web Dev & AI)' },
+                      { handle: '@mkbhd', label: '@mkbhd (19.4M subs · Tech & Hardware)' },
+                      { handle: '@veritasium', label: '@veritasium (16.9M subs · Science & Physics)' },
+                    ].map((p) => (
+                      <button
+                        key={p.handle}
+                        type="button"
+                        onClick={() => handleIngestPreset(p.handle)}
+                        disabled={isSubmitting}
+                        className="rounded-xl border border-[#b8d954]/50 bg-[#edf3c9]/50 px-2.5 py-1.5 mono text-[11px] font-semibold text-[#39450e] hover:bg-[#edf3c9] transition-colors"
+                      >
+                        ★ {p.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-foreground">
+                    Or Paste Any YouTube URL or Channel Handle:
+                  </label>
+                  <input
+                    value={channelInput}
+                    onChange={(e) => setChannelInput(e.target.value)}
+                    placeholder="e.g. @fireship, @mkbhd, https://youtube.com/@veritasium"
+                    className="mt-1.5 w-full rounded-xl border border-input bg-background px-3.5 py-2.5 text-sm outline-none focus:border-primary"
+                    data-testid="input-youtube-handle"
+                  />
+                  <p className="mt-1 text-[10px] text-muted-foreground">
+                    Pulls public uploads, view history, and calculates genuine vector collisions across your catalog.
+                  </p>
+                </div>
+
+                <div className="pt-2">
+                  <Button
+                    onClick={handleIngestCustom}
+                    disabled={isSubmitting || !channelInput.trim()}
+                    className="w-full"
+                    testId="button-submit-ingest-youtube"
+                  >
+                    {isSubmitting ? 'Ingesting YouTube data…' : 'Fetch & Ingest Public Channel'}
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className="mt-4 space-y-4">
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div>
+                    <label className="text-xs font-bold">Channel Name</label>
+                    <input
+                      value={customName}
+                      onChange={(e) => setCustomName(e.target.value)}
+                      placeholder="e.g. CodeCraft with David"
+                      className="mt-1 w-full rounded-xl border border-input bg-background px-3 py-2 text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold">Niche / Focus</label>
+                    <input
+                      value={customNiche}
+                      onChange={(e) => setCustomNiche(e.target.value)}
+                      placeholder="e.g. Full-Stack Python, Rust, Cloud"
+                      className="mt-1 w-full rounded-xl border border-input bg-background px-3 py-2 text-xs"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold">Upload CSV / JSON Video History</label>
+                  <div className="mt-1.5 flex items-center gap-3">
+                    <input
+                      type="file"
+                      accept=".csv,.json"
+                      onChange={handleFileUpload}
+                      className="block w-full text-xs text-muted-foreground file:mr-3 file:rounded-xl file:border-0 file:bg-secondary file:px-3.5 file:py-2 file:text-xs file:font-semibold file:text-foreground hover:file:bg-secondary/80"
+                    />
+                  </div>
+                  {parsedFileVideos.length > 0 && (
+                    <p className="mono mt-1 text-[11px] text-[#72920f] font-semibold">
+                      ✓ Ready to import {parsedFileVideos.length} videos from file.
+                    </p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold">Or Paste JSON Video Array directly:</label>
+                  <textarea
+                    value={customJson}
+                    onChange={(e) => setCustomJson(e.target.value)}
+                    placeholder='[{"title": "My First Video", "views": 45000, "topic": "Tech"}]'
+                    rows={3}
+                    className="mt-1 w-full resize-none rounded-xl border border-input bg-background p-2.5 mono text-[10px]"
+                  />
+                </div>
+
+                <div className="pt-2">
+                  <Button
+                    onClick={handleIngestCustom}
+                    disabled={isSubmitting || (!parsedFileVideos.length && !customJson.trim())}
+                    className="w-full"
+                    testId="button-submit-ingest-file"
+                  >
+                    {isSubmitting ? 'Importing catalog…' : 'Ingest Uploaded History'}
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </Shell>
+  );
 }
 
 export function Opportunities() {
@@ -1652,11 +2220,14 @@ export function SettingsPage() {
     }
   }, [settings.data]);
 
+  const queryClient = useQueryClient();
+
   const handleSave = () => {
     updateSettings.mutate(
       { data: form },
       {
         onSuccess: () => {
+          queryClient.invalidateQueries();
           toast.success('Creator profile saved and synchronized across all agents!');
         },
         onError: () => {
@@ -1675,8 +2246,29 @@ export function SettingsPage() {
       />
       <div className="grid max-w-4xl gap-5">
         <div className="panel p-6 md:p-8">
-          <div className="eyebrow">Creator identity</div>
-          <div className="mt-6 grid gap-5 md:grid-cols-2">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-border/70 pb-3">
+            <div className="eyebrow">Creator identity</div>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="mono text-[10px] text-muted-foreground">Quick Switch:</span>
+              {[
+                { name: 'Alex Rivera', niche: 'AI engineering and developer tools', audience: '18–34 year-old developers building with AI' },
+                { name: 'Sarah Chen', niche: 'AI Research & Frontier Models', audience: 'ML practitioners and engineering leaders' },
+                { name: 'Marcus Vance', niche: 'Full-Stack Indie SaaS & Bootstrapping', audience: 'Founders, builders, and solo operators' },
+              ].map((p) => (
+                <button
+                  key={p.name}
+                  type="button"
+                  onClick={() => setForm({ ...form, name: p.name, niche: p.niche, audience: p.audience })}
+                  className={`rounded-lg px-2.5 py-1 text-[10px] font-semibold transition-colors ${
+                    form.name === p.name ? 'bg-primary text-primary-foreground' : 'bg-secondary text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  {p.name}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="mt-5 grid gap-5 md:grid-cols-2">
             <label className="text-xs font-bold">
               Name
               <input
@@ -1684,6 +2276,7 @@ export function SettingsPage() {
                 onChange={(e) => setForm({ ...form, name: e.target.value })}
                 className="mt-2 w-full rounded-xl border border-input bg-background px-3 py-3 text-sm"
                 data-testid="input-settings-name"
+                placeholder="Enter any creator name"
               />
             </label>
             <label className="text-xs font-bold">

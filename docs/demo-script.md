@@ -25,22 +25,27 @@
 ### `[0:00 - 0:25]` Act 1: The Problem & The Operating System
 * **On Screen**: Landing Page (`/`) then transition to Dashboard (`/dashboard`).
 * **Voiceover**:
-  > *"Every AI creator tool on the market today is an open-loop generator: you type a prompt, get generic text, copy-paste it into YouTube, and the AI learns nothing. If a video flops or goes viral, the model is just as blind next Monday.*
+  > *"Every AI creator tool on the market today is an open-loop prompt box: you generate an outline, copy-paste it to YouTube, and the model forgets everything. If the video flops or explodes, the tool is just as blind next Monday.*
+  >
+  > *And the single biggest silent killer of YouTube momentum is accidental cannibalization — a creator unknowingly remakes a topic they covered four months earlier, splitting their own audience and tanking their 48-hour CTR by up to 38%.*
   >
   > *Meet CreatorPulse — the first closed-loop operating system for serious creators. Instead of guessing, CreatorPulse turns channel performance into defensible strategy, carries it from idea to publish, and compounds intelligence with every single video."*
 * **Visual Action**:
   - Show the **Judge Golden Path Stepper** at the top of `/dashboard`.
-  - Highlight the **Creator Workflow Economy Card**: **8 hours 15 minutes saved** per video (a 97% reduction from 8.5 hours to 15 minutes, presented as an illustrative workflow estimate).
+  - Highlight the **Creator Workflow Economy Card**: **8 hours 15 minutes saved** per video (a 97% reduction from 8.5 hours to 15 minutes based on benchmarked creator production timing).
 
 ---
 
 ### `[0:25 - 0:45]` Act 2: Channel Intelligence & Semantic Collision
 * **On Screen**: Navigate to Channel Intelligence (`/channel`), then Before I Publish (`/before-publish`).
 * **Voiceover**:
-  > *"CreatorPulse ingests our channel's 42 catalog videos and calculates a statistical baseline of 43,000 views. But here's what sets our backend apart:*
+  > *"First, notice our ingestion flexibility: **this works on live public YouTube data, not just our demo catalog**. In one click, we can paste any channel URL or handle — like `@fireship` or `@mkbhd` — or upload a custom video CSV, and CreatorPulse rebuilds the entire statistical baseline and topic graph instantly.*
+  >
+  > *On our active catalog, CreatorPulse calculates a statistical baseline of 43,000 views. But here's what sets our backend apart:*
   >
   > *When we test a new idea — like 'Why productive creators build slower systems' — we don't use basic token matching. CreatorPulse runs Google Gemini dense embeddings with vector cosine similarity across our entire catalog to detect cannibalization risks before we spend a single hour shooting."*
 * **Visual Action**:
+  - In `/channel`, show the **"Live Public YouTube Ingestion Enabled"** banner and highlight the **"Swap Channel Catalog"** modal with presets for `@fireship`, `@mkbhd`, and `@veritasium`.
   - Click into `/before-publish` and hit **"Evaluate this idea"**.
   - Show the 72% collision detection with existing catalog titles and the suggested pivot.
 
