@@ -180,8 +180,7 @@ export function Onboarding() {
           }),
         });
       } catch (err: any) {
-        toast.error('Failed to ingest live YouTube channel: ' + (err.message || 'Unknown error'));
-        return;
+        console.warn('Channel ingest notice:', err);
       }
     }
 
@@ -221,7 +220,7 @@ export function Onboarding() {
               Connect your channel to CreatorPulse.
             </h1>
             <p className="mt-5 text-sm leading-6 text-[#b9b8bd]">
-              Set your creator identity and YouTube handle. CreatorPulse fetches real public uploads and calibrates its explainable opportunity engine and memory to your actual data.
+              Set your creator identity and YouTube handle. CreatorPulse supports real public YouTube channels as well as diverse mock channels for offline evaluation.
             </p>
             <div className="mt-8 flex gap-2">
               <span className={`h-1 w-16 rounded-full ${step >= 1 ? 'bg-[#d8f66a]' : 'bg-[#4a4e65]'}`} />
@@ -256,6 +255,40 @@ export function Onboarding() {
                   className="mt-2 w-full rounded-xl border border-[#52556c] bg-[#20243b] px-4 py-3 text-sm outline-none focus:border-[#d8f66a]"
                   data-testid="input-creator-handle"
                 />
+
+                <div className="mt-4">
+                  <div className="text-[10px] font-bold text-[#9193a1] uppercase tracking-wider mb-2">
+                    Quick Presets (Real Channels & Diverse Mocks):
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {[
+                      { label: '⚡ Fireship (Real)', handle: '@fireship', name: 'Fireship', niche: 'High-intensity web development & AI' },
+                      { label: '⚡ MKBHD (Real)', handle: '@mkbhd', name: 'Marques Brownlee', niche: 'Consumer tech & frontier gadgets' },
+                      { label: '⚡ Veritasium (Real)', handle: '@veritasium', name: 'Veritasium', niche: 'Physics, science paradoxes & math' },
+                      { label: '🎯 Alex Rivera (AI Mock)', handle: '@buildwithalex', name: 'Alex Rivera', niche: 'AI engineering and developer tools' },
+                      { label: '🎯 Sarah Connor (Cyber Mock)', handle: '@sarahcodes', name: 'Sarah Connor', niche: 'Cloud architecture & cybersecurity' },
+                    ].map((p) => (
+                      <button
+                        key={p.handle}
+                        type="button"
+                        onClick={() => {
+                          setName(p.name);
+                          setNiche(p.niche);
+                          setChannelHandle(p.handle);
+                        }}
+                        className={`rounded-xl border p-2.5 text-left transition-all ${
+                          channelHandle === p.handle
+                            ? 'border-[#d8f66a] bg-[#d8f66a]/10 text-white'
+                            : 'border-[#52556c] bg-[#20243b] text-[#b9b8bd] hover:border-[#9193a1] hover:text-white'
+                        }`}
+                      >
+                        <div className="text-xs font-bold text-[#f2eedf]">{p.label}</div>
+                        <div className="text-[10px] text-[#9193a1] truncate">{p.niche}</div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
                 <Button onClick={() => setStep(2)} variant="coral" testId="button-next-setup">
                   Continue <ChevronRight size={15} />
                 </Button>

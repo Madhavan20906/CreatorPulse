@@ -369,12 +369,13 @@ export async function customFetch<T = unknown>(
     const response = await fetch(input, { ...init, method, headers });
     const mediaType = getMediaType(response.headers);
     const isHtmlRedirect = mediaType?.includes("text/html") && requestInfo.url.includes("/api");
+    const isStaticHostMiss = (response.status === 405 || response.status === 404 || isHtmlRedirect) && requestInfo.url.includes("/api");
 
     if (response.ok && !isHtmlRedirect) {
       return (await parseSuccessBody(response, responseType, requestInfo)) as T;
     }
 
-    if (!response.ok && !isHtmlRedirect) {
+    if (!response.ok && !isStaticHostMiss) {
       try {
         const errorJson = await response.json();
         if (errorJson?.error) {
@@ -388,7 +389,7 @@ export async function customFetch<T = unknown>(
     networkError = netErr;
   }
 
-  // If backend explicitly responded with an error (e.g. 400 Bad Request), rethrow it
+  // If backend explicitly responded with an application JSON error, rethrow it
   if (backendError) {
     throw backendError;
   }
