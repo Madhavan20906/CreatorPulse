@@ -57,8 +57,8 @@ const BENCHMARKS: TaskBenchmark[] = [
 ];
 
 export function WorkflowEconomyModal({
-  creatorName = 'Alex Rivera',
-  channelHandle = '@buildwithalex',
+  creatorName = 'Active Creator',
+  channelHandle = '@creator',
 }: {
   creatorName?: string;
   channelHandle?: string;

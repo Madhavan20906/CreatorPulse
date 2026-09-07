@@ -115,7 +115,7 @@ export function Shell({
   const opportunitiesQuery = useListOpportunities();
   const channelQuery = useGetChannel();
 
-  const creatorName = settingsQuery.data?.name?.trim() || 'Alex Rivera';
+  const creatorName = settingsQuery.data?.name?.trim() || channelQuery.data?.name?.trim() || 'Alex Rivera';
   const initials =
     creatorName
       .split(/\s+/)
@@ -124,7 +124,7 @@ export function Shell({
       .slice(0, 2)
       .join('')
       .toUpperCase() || 'AR';
-  const handle = `@${creatorName.toLowerCase().replace(/[^a-z0-9]/g, '') || 'buildwithalex'}`;
+  const handle = `@${(creatorName || 'creator').toLowerCase().replace(/[^a-z0-9]/g, '')}`;
 
   const activities = activityQuery.data || [];
   const unreadCount = activities.filter((a) => !readIds.has(a.id)).length;

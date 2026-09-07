@@ -456,7 +456,7 @@ export function Dashboard() {
                   : 'DEMO MODE · SEEDED CATALOG (42 VIDEOS)'}
             </span>
             <span className="text-[#a0a3b5] hidden sm:inline">
-              Channel: <strong className="text-white">{channelQuery.data?.name || 'Alex Rivera'}</strong> ({channelQuery.data?.handle || '@buildwithalex'})
+              Channel: <strong className="text-white">{channelQuery.data?.name || creatorName}</strong> ({channelQuery.data?.handle || `@${creatorName.toLowerCase().replace(/[^a-z0-9]/g, '')}`})
             </span>
           </div>
 
@@ -477,8 +477,8 @@ export function Dashboard() {
               memory={memoryQuery.data}
             />
             <WorkflowEconomyModal
-              creatorName={channelQuery.data?.name}
-              channelHandle={channelQuery.data?.handle}
+              creatorName={creatorName || channelQuery.data?.name}
+              channelHandle={channelQuery.data?.handle || `@${(creatorName || 'creator').toLowerCase().replace(/[^a-z0-9]/g, '')}`}
             />
           </div>
         </div>
@@ -2248,7 +2248,9 @@ export function CalendarPage() {
 export function Analytics() {
   const measure = useRecordMeasurement();
   const channelQuery = useGetChannel();
+  const settingsQuery = useGetSettings();
   const channel = channelQuery.data;
+  const channelDisplayName = channel?.name || settingsQuery.data?.name || 'Active channel';
   const [liveVideoUrl, setLiveVideoUrl] = useState('');
   const [isSyncingLive, setIsSyncingLive] = useState(false);
   const [result, setResult] = useState<{
@@ -2419,7 +2421,7 @@ export function Analytics() {
           <div className="mt-2 flex items-end justify-between">
             <div>
               <h3 className="display text-2xl font-bold">Views vs baseline</h3>
-              <p className="mt-1 text-sm text-muted-foreground">Last 30 days / Alex Rivera channel</p>
+              <p className="mt-1 text-sm text-muted-foreground">Last 30 days / {channelDisplayName} channel</p>
             </div>
             <span className="mono rounded-lg bg-[#edf3c9] px-2 py-1 text-[10px] text-[#72920f]">+18.6%</span>
           </div>
@@ -2854,8 +2856,8 @@ export function SettingsPage() {
         </div>
         <div className="panel flex items-center justify-between gap-6 p-6">
           <div>
-            <div className="eyebrow">Demo data mode</div>
-            <h3 className="mt-2 text-sm font-bold">Keep the simulated Alex Rivera channel active</h3>
+            <div className="eyebrow">Benchmark & offline safety</div>
+            <h3 className="mt-2 text-sm font-bold">Keep benchmark demo catalog active</h3>
             <p className="mt-1 text-xs text-muted-foreground">
               Deterministic fallbacks and in-memory persistence ensure zero 500 crashes during judging.
             </p>
