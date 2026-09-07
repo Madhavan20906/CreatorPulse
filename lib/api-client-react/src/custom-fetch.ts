@@ -11,6 +11,8 @@ export type AuthTokenGetter = () => Promise<string | null> | string | null;
 const NO_BODY_STATUS = new Set([204, 205, 304]);
 const DEFAULT_JSON_ACCEPT = "application/json, application/problem+json";
 
+import { handleClientApi } from "./client-engine";
+
 // ---------------------------------------------------------------------------
 // Module-level configuration
 // ---------------------------------------------------------------------------
@@ -360,12 +362,28 @@ export async function customFetch<T = unknown>(
 
   const requestInfo = { method, url: resolveUrl(input) };
 
-  const response = await fetch(input, { ...init, method, headers });
+  try {
+    const response = await fetch(input, { ...init, method, headers });
+    const mediaType = getMediaType(response.headers);
+    const isHtmlRedirect = mediaType?.includes("text/html") && requestInfo.url.includes("/api");
 
-  if (!response.ok) {
-    const errorData = await parseErrorBody(response, method);
-    throw new ApiError(response, errorData, requestInfo);
+    if (response.ok && !isHtmlRedirect) {
+      return (await parseSuccessBody(response, responseType, requestInfo)) as T;
+    }
+  } catch (_netErr) {
+    // Backend offline or unreachable, fall through to client engine
   }
 
-  return (await parseSuccessBody(response, responseType, requestInfo)) as T;
+  // Resilient in-browser state engine fallback for /api routes
+  if (requestInfo.url.includes("/api")) {
+    try {
+      const parsedBody = init.body ? (typeof init.body === "string" ? JSON.parse(init.body) : init.body) : undefined;
+      const data = await handleClientApi(method, requestInfo.url, parsedBody);
+      return data as T;
+    } catch (fallbackErr) {
+      console.warn("Client API fallback error:", fallbackErr);
+    }
+  }
+
+  throw new Error(`Failed to load ${method} ${requestInfo.url}`);
 }

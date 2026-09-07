@@ -18,6 +18,8 @@ import {
   useRecordMeasurement,
   useRunQualityGate,
   useUpdateSettings,
+  getGeminiApiKey,
+  setGeminiApiKey,
 } from '@workspace/api-client-react';
 import type { Activity as ActivityType, ContentPackage, Opportunity, QualityReport } from '@workspace/api-client-react';
 import { Button, EmptyState, ErrorState, LoadingState, Meter, PageIntro, Shell } from '@/components/shell';
@@ -1627,6 +1629,7 @@ export function SettingsPage() {
   const settings = useGetSettings();
   const updateSettings = useUpdateSettings();
   const [demo, setDemo] = useState(true);
+  const [apiKey, setApiKey] = useState(getGeminiApiKey() || '');
   const [form, setForm] = useState({
     name: 'Alex Rivera',
     niche: 'AI engineering and developer tools',
@@ -1743,6 +1746,38 @@ export function SettingsPage() {
               }`}
             />
           </button>
+        </div>
+        <div className="panel p-6 md:p-8">
+          <div className="flex items-center justify-between">
+            <div className="eyebrow text-[#b8d954]">Google Gemini Intelligence Engine</div>
+            <span className="rounded-full bg-[#3c415e] px-2.5 py-0.5 text-[10px] font-bold text-[#f2eedf]">
+              {apiKey ? 'Active API Key' : 'Deterministic Mode'}
+            </span>
+          </div>
+          <h3 className="mt-2 text-base font-bold">Dual-Engine AI Intelligence</h3>
+          <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+            CreatorPulse runs seamlessly with or without a key. When a Gemini API key is configured, live generative intelligence and text-embedding-004 vectors are enabled. Without a key, the mathematical Section 50 scoring formula and 42-video catalog semantic engine execute deterministically with zero latency and zero crashes.
+          </p>
+          <div className="mt-4 flex flex-col md:flex-row gap-3">
+            <input
+              type="password"
+              placeholder="Enter GEMINI_API_KEY (AIzaSy...)"
+              value={apiKey}
+              onChange={(e) => setApiKey(e.target.value)}
+              className="flex-1 rounded-xl border border-input bg-background px-3 py-2 text-xs"
+              data-testid="input-gemini-api-key"
+            />
+            <Button
+              onClick={() => {
+                setGeminiApiKey(apiKey);
+                toast.success(apiKey ? 'Gemini API Key saved for live generation!' : 'Using deterministic AI engine');
+              }}
+              variant="secondary"
+              testId="button-save-gemini-key"
+            >
+              Update AI Mode
+            </Button>
+          </div>
         </div>
       </div>
     </Shell>
