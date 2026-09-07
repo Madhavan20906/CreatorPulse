@@ -31,6 +31,7 @@ import { ShortVideoGenerator } from '@/components/short-video-generator';
 import { ContentConstellation } from '@/components/content-constellation';
 import { CommunityReplyAgent } from '@/components/community-reply-agent';
 import { WorkflowEconomyModal } from '@/components/workflow-economy-modal';
+import { JudgeEvidencePanel } from '@/components/judge-evidence-panel';
 import {
   downloadStudioReleasePack,
   downloadSubtitlesSrt,
