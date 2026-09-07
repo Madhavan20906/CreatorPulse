@@ -37,7 +37,7 @@ import {
   loadCreatorState,
   saveCreatorState,
 } from "../lib/creator-state";
-import { deriveTopicsFromVideos, deriveOpportunitiesForChannel } from "../lib/real-channels";
+import { POPULAR_REAL_CHANNELS, deriveTopicsFromVideos, deriveOpportunitiesForChannel } from "../lib/real-channels";
 import { fetchLiveYouTubeCatalog, fetchLiveVideoMetrics } from "../lib/youtube-fetcher";
 import { publishToYouTube } from "../lib/youtube-publisher";
 
@@ -94,10 +94,25 @@ router.post("/channel/ingest", async (req, res): Promise<void> => {
       resolvedVideos = liveProfile.videos;
       dataMode = liveProfile.dataMode;
     } catch (fetchErr: any) {
-      res.status(400).json({
-        error: fetchErr.message || `Failed to ingest YouTube channel "${rawInput}".`,
-      });
-      return;
+      const cleanKey = rawInput.toLowerCase().replace(/^https?:\/\/(www\.)?youtube\.com\//, "").replace(/^\/?@?/, "");
+      const preset = Object.entries(POPULAR_REAL_CHANNELS).find(
+        ([key]) => key.replace("@", "").toLowerCase() === cleanKey || cleanKey.includes(key.replace("@", "").toLowerCase())
+      );
+
+      if (preset) {
+        const p = preset[1];
+        resolvedName = channelName || p.name;
+        resolvedHandle = p.handle;
+        resolvedNiche = niche || p.niche;
+        resolvedSubscribers = p.subscribers;
+        resolvedVideos = JSON.parse(JSON.stringify(p.videos));
+        dataMode = `${p.name} verified snapshot · Offline resilience fallback (${p.videos.length} videos)`;
+      } else {
+        res.status(400).json({
+          error: fetchErr.message || `Failed to ingest YouTube channel "${rawInput}".`,
+        });
+        return;
+      }
     }
   } else {
     res.status(400).json({

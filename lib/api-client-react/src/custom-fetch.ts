@@ -362,6 +362,9 @@ export async function customFetch<T = unknown>(
 
   const requestInfo = { method, url: resolveUrl(input) };
 
+  let networkError: any = null;
+  let backendError: any = null;
+
   try {
     const response = await fetch(input, { ...init, method, headers });
     const mediaType = getMediaType(response.headers);
@@ -370,20 +373,37 @@ export async function customFetch<T = unknown>(
     if (response.ok && !isHtmlRedirect) {
       return (await parseSuccessBody(response, responseType, requestInfo)) as T;
     }
-  } catch (_netErr) {
-    // Backend offline or unreachable, fall through to client engine
+
+    if (!response.ok && !isHtmlRedirect) {
+      try {
+        const errorJson = await response.json();
+        if (errorJson?.error) {
+          backendError = new Error(errorJson.error);
+        }
+      } catch {
+        backendError = new Error(`HTTP ${response.status} from ${requestInfo.url}`);
+      }
+    }
+  } catch (netErr) {
+    networkError = netErr;
   }
 
-  // Resilient in-browser state engine fallback for /api routes
+  // If backend explicitly responded with an error (e.g. 400 Bad Request), rethrow it
+  if (backendError) {
+    throw backendError;
+  }
+
+  // Resilient in-browser state engine fallback for /api routes (used when offline or on static hosting)
   if (requestInfo.url.includes("/api")) {
     try {
       const parsedBody = init.body ? (typeof init.body === "string" ? JSON.parse(init.body) : init.body) : undefined;
       const data = await handleClientApi(method, requestInfo.url, parsedBody);
       return data as T;
-    } catch (fallbackErr) {
+    } catch (fallbackErr: any) {
       console.warn("Client API fallback error:", fallbackErr);
+      throw fallbackErr instanceof Error ? fallbackErr : new Error(String(fallbackErr));
     }
   }
 
-  throw new Error(`Failed to load ${method} ${requestInfo.url}`);
+  throw networkError || new Error(`Failed to load ${method} ${requestInfo.url}`);
 }
