@@ -19,6 +19,7 @@ function Router() {
   return <RoutedErrorBoundary><Switch>
     <Route path="/" component={Landing}/>
     <Route path="/onboarding" component={Onboarding}/>
+    <Route path="/setup" component={Onboarding}/>
     <Route path="/dashboard" component={Dashboard}/>
     <Route path="/channel" component={Channel}/>
     <Route path="/opportunities" component={Opportunities}/>

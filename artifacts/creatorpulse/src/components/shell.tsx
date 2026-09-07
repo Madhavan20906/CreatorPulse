@@ -143,13 +143,14 @@ export function Shell({
   const queryClient = useQueryClient();
   const handleSignOut = () => {
     try {
+      localStorage.removeItem('creatorpulse:clientState');
       localStorage.removeItem('creatorpulse:lastContentId');
       localStorage.removeItem('creatorpulse:read_notifications');
       localStorage.removeItem('creatorpulse:customChannel');
     } catch {}
-    toast.success('Signed out. Redirecting to channel setup...');
+    toast.success('Signed out. Redirecting to channel onboarding...');
     queryClient.clear();
-    setLocation('/setup');
+    setLocation('/onboarding');
   };
 
   // Keyboard shortcut for Cmd+K / Ctrl+K search and Escape
