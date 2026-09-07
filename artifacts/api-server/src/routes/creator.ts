@@ -181,7 +181,7 @@ router.post("/channel/ingest", async (req, res): Promise<void> => {
   };
 
   state.pulse.baselineViews = averageViews;
-  state.pulse.creatorName = resolvedName;
+  state.pulse.creatorName = state.memory?.identity?.name || state.pulse?.creatorName || "Alex Rivera";
   state.pulse.headline = `Channel intelligence updated for ${resolvedName}.`;
   state.pulse.trend = "+24% vs. previous period";
   state.opportunities = deriveOpportunitiesForChannel(state.channel);
@@ -203,7 +203,7 @@ router.post("/channel/reset", async (_req, res): Promise<void> => {
   const state = await loadCreatorState();
   state.channel = JSON.parse(JSON.stringify(initialState.channel));
   state.opportunities = JSON.parse(JSON.stringify(initialState.opportunities));
-  state.pulse.creatorName = initialState.pulse.creatorName;
+  state.pulse.creatorName = state.memory?.identity?.name || initialState.pulse.creatorName;
   state.pulse.baselineViews = initialState.pulse.baselineViews;
   state.pulse.recommended = state.opportunities[0];
   state.pulse.headline = initialState.pulse.headline;
@@ -1073,33 +1073,45 @@ export function calculateQuality(input: any): any {
 
 export async function evaluateIdea(state: any, idea: string): Promise<any> {
   const ideaTokens = extractMeaningfulTokens(idea);
-  const normalizedIdea = idea.toLowerCase();
+  const normalizedIdea = idea.toLowerCase().trim();
 
   // 1. Genuine semantic vector generation (Gemini text-embedding-004 with dense vector fallback)
   let geminiVec = await getGeminiEmbedding(idea);
   const ideaVec = geminiVec || generateDeterministicVector(idea);
   const embeddingEngine = geminiVec ? "Gemini text-embedding-004" : "Deterministic dense semantic vector (128d)";
 
-  const matches = state.channel.videos
+  const matches = (state.channel.videos || [])
     .map((video: any) => {
       const videoTokens = extractMeaningfulTokens(video.title);
       const { similarity: jaccardSim, overlapTokens } = computeTokenJaccard(ideaTokens, videoTokens);
 
-      // Semantic vector cosine similarity
       const videoVec = generateDeterministicVector(`${video.title} ${video.topic}`);
       const cosineSim = cosineSimilarity(ideaVec, videoVec);
       const cosineSimPercent = Math.max(0, Math.min(100, Math.round(cosineSim * 100)));
 
-      // Combined semantic + topical weight
-      const topicMatch = normalizedIdea.includes(video.topic.toLowerCase()) || video.topic.toLowerCase().includes(normalizedIdea);
-      const topicBonus = topicMatch ? 10 : 0;
-      const combinedSimilarity = Math.min(96, Math.max(cosineSimPercent, Math.round(cosineSimPercent * 0.7 + jaccardSim * 0.2 + topicBonus)));
+      // Exact title or direct concept match bonus
+      const isExactOrSub =
+        normalizedIdea.includes(video.title.toLowerCase()) ||
+        video.title.toLowerCase().includes(normalizedIdea);
+      const exactBonus = isExactOrSub ? 35 : 0;
+
+      const topicMatch =
+        normalizedIdea.includes(video.topic.toLowerCase()) ||
+        video.topic.toLowerCase().includes(normalizedIdea);
+      const topicBonus = topicMatch ? 8 : 0;
+      const combinedSimilarity = Math.min(
+        98,
+        Math.max(cosineSimPercent, Math.round(cosineSimPercent * 0.7 + jaccardSim * 0.2 + topicBonus + exactBonus))
+      );
 
       return {
         videoTitle: video.title,
         similarity: combinedSimilarity,
         cosineSimilarity: Number(cosineSim.toFixed(3)),
         overlapTokens,
+        topic: video.topic,
+        format: video.format,
+        views: video.views,
       };
     })
     .sort((a: any, b: any) => b.similarity - a.similarity)
@@ -1108,43 +1120,133 @@ export async function evaluateIdea(state: any, idea: string): Promise<any> {
   const topMatch = matches[0];
   const collisionRisk = topMatch ? topMatch.similarity : 8;
 
-  const isAgentRelated = normalizedIdea.includes("agent") || normalizedIdea.includes("mcp") || normalizedIdea.includes("autonomous");
-  const isWorkflowRelated = normalizedIdea.includes("workflow") || normalizedIdea.includes("tool") || normalizedIdea.includes("automation");
-  const isRagRelated = normalizedIdea.includes("rag") || normalizedIdea.includes("retrieval") || normalizedIdea.includes("embedding");
+  // 2. Real Audience Fit based on Channel Topics & Niche
+  const topics = state.channel.topics || [];
+  let bestTopic: any = null;
+  let highestTopicSim = 0;
 
-  let audienceFit = 72;
-  let historicalFit = 75;
-  if (isAgentRelated) {
-    audienceFit = 96;
-    historicalFit = 94;
-  } else if (isWorkflowRelated) {
-    audienceFit = 88;
-    historicalFit = 85;
-  } else if (isRagRelated) {
-    audienceFit = 82;
-    historicalFit = 80;
+  for (const t of topics) {
+    const topicVec = generateDeterministicVector(`${t.name} ${t.signal || ""}`);
+    const sim = cosineSimilarity(ideaVec, topicVec);
+    if (sim > highestTopicSim) {
+      highestTopicSim = sim;
+      bestTopic = t;
+    }
   }
 
-  const novelty = Math.max(15, 100 - collisionRisk);
-  const opportunity = Math.round(
-    audienceFit * 0.35 + historicalFit * 0.30 + novelty * 0.25 - collisionRisk * 0.10
+  const nicheVec = generateDeterministicVector(state.channel.niche || "Engineering and Technology");
+  const nicheSim = cosineSimilarity(ideaVec, nicheVec);
+
+  let audienceFit: number;
+  if (bestTopic && highestTopicSim >= 0.35) {
+    const baseFit = Number(bestTopic.audienceFit) || 85;
+    audienceFit = Math.round(baseFit * 0.85 + highestTopicSim * 20);
+  } else if (nicheSim >= 0.28) {
+    audienceFit = Math.round(60 + nicheSim * 35);
+  } else {
+    audienceFit = Math.round(48 + nicheSim * 30);
+  }
+  audienceFit = Math.max(48, Math.min(99, audienceFit));
+
+  // 3. Real Historical Fit based on detected video format
+  const isDeepDive = /\b(why|architecture|deep dive|internals|breakdown|under the hood|failure|mistakes|post-mortem|truth)\b/i.test(
+    normalizedIdea
+  );
+  const isTutorial = /\b(how to|build|from scratch|guide|tutorial|setup|step by step|create|crash course)\b/i.test(
+    normalizedIdea
+  );
+  const isListicle = /\b(top|best|vs|comparison|alternatives|\b\d+\s+(tools|tips|libraries|ways|mistakes))\b/i.test(
+    normalizedIdea
   );
 
+  const detectedFormat = isDeepDive ? "Deep dive" : isTutorial ? "Practical tutorial" : isListicle ? "Listicle" : "Essay";
+
+  const matchingFormatVideos = (state.channel.videos || []).filter((v: any) => v.format === detectedFormat);
+  let historicalFit: number;
+  if (matchingFormatVideos.length > 0) {
+    const avgViews =
+      matchingFormatVideos.reduce((s: number, v: any) => s + (v.views || 0), 0) / matchingFormatVideos.length;
+    const baseline = state.channel.averageViews || 41300;
+    const ratio = avgViews / baseline;
+    const avgEngagement =
+      matchingFormatVideos.reduce((s: number, v: any) => s + (v.engagementRate || 6.5), 0) /
+      matchingFormatVideos.length;
+    historicalFit = Math.round(68 + (ratio - 1) * 30 + (avgEngagement - 6) * 3);
+  } else {
+    historicalFit = isDeepDive ? 88 : isTutorial ? 84 : isListicle ? 72 : 75;
+  }
+  historicalFit = Math.max(45, Math.min(98, historicalFit));
+
+  // 4. Real Novelty Score
+  const catalogTokens = new Set<string>();
+  (state.channel.videos || []).forEach((v: any) => {
+    extractMeaningfulTokens(v.title).forEach((tok) => catalogTokens.add(tok));
+  });
+  const novelTokens = Array.from(ideaTokens).filter((t) => !catalogTokens.has(t));
+  const noveltyRatio = ideaTokens.size > 0 ? novelTokens.length / ideaTokens.size : 0.5;
+  const novelty = Math.max(20, Math.min(98, Math.round((100 - collisionRisk) * 0.7 + noveltyRatio * 30)));
+
+  // 5. Section 50 Linear Attribution Formula
+  const opportunity = Math.max(
+    10,
+    Math.min(
+      99,
+      Math.round(audienceFit * 0.35 + historicalFit * 0.3 + novelty * 0.25 - collisionRisk * 0.1)
+    )
+  );
+
+  // 6. Recommendation Verdict (REFRAME when collision >= 55%, else GO)
   const shouldReframe = collisionRisk >= 55;
+  const isOffNiche = audienceFit < 48;
+  const recommendation = shouldReframe ? "REFRAME" : "GO";
+
+  // 7. Dynamic Core Subject Extraction
+  const coreSubject = idea
+    .replace(/^(how to|why|what is|the best way to|a guide to|how i|top \d+|5 |10 |3 |building a|i built an|i made an)\s+/i, "")
+    .replace(/[?.!]+$/, "")
+    .trim() || idea;
+
+  // 8. Truly Dynamic Suggested Alternative
+  let suggestedAlternative: string;
+  if (shouldReframe) {
+    suggestedAlternative = isTutorial
+      ? `Pivot from introductory tutorial to high-stakes post-mortem: "${coreSubject}: 3 Production Bottlenecks and How We Resolved Them"`
+      : isDeepDive
+      ? `Shift to an empirical benchmark breakdown: "Testing ${coreSubject} Under 10,000 Concurrent Loads: What Actually Broke"`
+      : `Reframe angle to unaddressed tradeoffs: "Why We Swapped Our ${coreSubject} Architecture: Real Production Lessons"`;
+  } else if (isOffNiche) {
+    suggestedAlternative = `Bridge into your ${state.channel.niche || "channel"} audience: "How to Build an Automated ${coreSubject} Pipeline for Practitioners"`;
+  } else if (opportunity >= 74) {
+    suggestedAlternative = isTutorial
+      ? `Lead with immediate outcome: "Building a Production-Ready ${coreSubject} in 30 Minutes (Full Architecture)"`
+      : isDeepDive
+      ? `Hook on high-leverage insight: "The ${coreSubject} Architecture That Solves 90% of Performance Degradation"`
+      : `High-conversion title: "${coreSubject} Explained: What 99% of Tutorials Get Completely Wrong"`;
+  } else {
+    suggestedAlternative = `De-risk as a 45-second Short first: "The Single Biggest Mistake Beginners Make With ${coreSubject}"`;
+  }
+
+  // 9. Fully Tailored Strategic Explanation
+  let explanation: string;
+  if (shouldReframe) {
+    explanation = `High collision risk detected (${collisionRisk}% vector similarity via ${embeddingEngine} with "${topMatch?.videoTitle}"). Making another broad video on this topic risks splitting audience watch-time and cannibalizing your 48-hour CTR. Pivot the angle toward specific edge cases, architectural trade-offs, or production benchmarks.`;
+  } else if (isOffNiche) {
+    explanation = `Low audience fit (${audienceFit}/100 via ${embeddingEngine}). This topic has low topical alignment with your channel's established pillar (${state.channel.niche || state.channel.topTopic}). Unless framed as an automation or bridge tool, your core subscriber base will drop off within 30 seconds.`;
+  } else {
+    const topicLabel = bestTopic?.name || state.channel.topTopic || "core content";
+    explanation = `Clean semantic positioning (${opportunity}/100, ${collisionRisk}% collision risk via ${embeddingEngine}). High resonance with your ${topicLabel} audience (Audience fit: ${audienceFit}, Historical fit: ${historicalFit} for ${detectedFormat}). Vector distance from your existing ${state.channel.videos?.length || 42} catalog uploads confirms this explores fresh territory.`;
+  }
+
   return {
     idea,
-    opportunity: Math.max(10, Math.min(99, opportunity)),
+    opportunity,
     audienceFit,
     novelty,
     collisionRisk,
     historicalFit,
-    recommendation: shouldReframe ? "REFRAME" : "GO",
-    explanation: shouldReframe
-      ? `Semantic collision detected (${collisionRisk}% vector similarity via ${embeddingEngine}). This idea shares high conceptual overlap with library video "${topMatch?.videoTitle}" (cosine: ${topMatch?.cosineSimilarity}). Reframe the angle toward failure analysis or novel edge cases to avoid cannibalizing your catalog views.`
-      : `Clean semantic positioning (${collisionRisk}% collision risk via ${embeddingEngine}). Strong resonance with your developer audience and distinct vector space separation from your existing 42 uploads.`,
-    suggestedAlternative: shouldReframe
-      ? "Focus on the unaddressed failure mode or internal architecture rather than an introductory tutorial."
-      : "Lead with a concrete technical failure mode in the first 15 seconds to maximize retention.",
+    recommendation,
+    explanation,
+    suggestedAlternative,
     similarVideos: matches.map(({ videoTitle, similarity }: any) => ({ videoTitle, similarity })),
   };
 }

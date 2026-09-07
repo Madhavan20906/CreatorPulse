@@ -227,10 +227,11 @@ export function calculateQuality(input: any): any {
 
 export function evaluateIdeaClient(state: ClientCreatorState, idea: string): any {
   const ideaTokens = extractMeaningfulTokens(idea);
-  const normalizedIdea = idea.toLowerCase();
+  const normalizedIdea = idea.toLowerCase().trim();
   const ideaVec = generateDeterministicVector(idea);
 
-  const matches = state.channel.videos
+  // 1. Precise Semantic Vector Collision against all videos in catalog
+  const matches = (state.channel.videos || [])
     .map((video: any) => {
       const videoTokens = extractMeaningfulTokens(video.title);
       const { similarity: jaccardSim, overlapTokens } = computeTokenJaccard(ideaTokens, videoTokens);
@@ -238,15 +239,29 @@ export function evaluateIdeaClient(state: ClientCreatorState, idea: string): any
       const cosineSim = cosineSimilarity(ideaVec, videoVec);
       const cosineSimPercent = Math.max(0, Math.min(100, Math.round(cosineSim * 100)));
 
-      const topicMatch = normalizedIdea.includes(video.topic.toLowerCase()) || video.topic.toLowerCase().includes(normalizedIdea);
-      const topicBonus = topicMatch ? 10 : 0;
-      const combinedSimilarity = Math.min(96, Math.max(cosineSimPercent, Math.round(cosineSimPercent * 0.7 + jaccardSim * 0.2 + topicBonus)));
+      // Exact title or direct concept match bonus
+      const isExactOrSub =
+        normalizedIdea.includes(video.title.toLowerCase()) ||
+        video.title.toLowerCase().includes(normalizedIdea);
+      const exactBonus = isExactOrSub ? 35 : 0;
+
+      const topicMatch =
+        normalizedIdea.includes(video.topic.toLowerCase()) ||
+        video.topic.toLowerCase().includes(normalizedIdea);
+      const topicBonus = topicMatch ? 8 : 0;
+      const combinedSimilarity = Math.min(
+        98,
+        Math.max(cosineSimPercent, Math.round(cosineSimPercent * 0.7 + jaccardSim * 0.2 + topicBonus + exactBonus))
+      );
 
       return {
         videoTitle: video.title,
         similarity: combinedSimilarity,
         cosineSimilarity: Number(cosineSim.toFixed(3)),
         overlapTokens,
+        topic: video.topic,
+        format: video.format,
+        views: video.views,
       };
     })
     .sort((a: any, b: any) => b.similarity - a.similarity)
@@ -255,46 +270,127 @@ export function evaluateIdeaClient(state: ClientCreatorState, idea: string): any
   const topMatch = matches[0];
   const collisionRisk = topMatch ? topMatch.similarity : 8;
 
-  const isAgentRelated = normalizedIdea.includes("agent") || normalizedIdea.includes("mcp") || normalizedIdea.includes("autonomous");
-  const isWorkflowRelated = normalizedIdea.includes("workflow") || normalizedIdea.includes("tool") || normalizedIdea.includes("automation");
-  const isRagRelated = normalizedIdea.includes("rag") || normalizedIdea.includes("retrieval") || normalizedIdea.includes("embedding");
+  // 2. Real Audience Fit based on Channel Topics & Niche
+  const topics = state.channel.topics || [];
+  let bestTopic: any = null;
+  let highestTopicSim = 0;
 
-  let audienceFit = 72;
-  let historicalFit = 75;
-  if (isAgentRelated) {
-    audienceFit = 96;
-    historicalFit = 94;
-  } else if (isWorkflowRelated) {
-    audienceFit = 88;
-    historicalFit = 85;
-  } else if (isRagRelated) {
-    audienceFit = 82;
-    historicalFit = 80;
+  for (const t of topics) {
+    const topicVec = generateDeterministicVector(`${t.name} ${t.signal || ""}`);
+    const sim = cosineSimilarity(ideaVec, topicVec);
+    if (sim > highestTopicSim) {
+      highestTopicSim = sim;
+      bestTopic = t;
+    }
   }
 
-  const novelty = Math.max(20, Math.min(98, 100 - collisionRisk + Math.floor(Math.random() * 4)));
-  const opportunity = Math.round(audienceFit * 0.35 + novelty * 0.25 + (100 - collisionRisk) * 0.2 + historicalFit * 0.2);
+  // Also test similarity against channel niche
+  const nicheVec = generateDeterministicVector(state.channel.niche || "Engineering and Technology");
+  const nicheSim = cosineSimilarity(ideaVec, nicheVec);
 
-  const recommendation =
-    collisionRisk > 70
-      ? "REFRAME"
-      : opportunity >= 80
-      ? "GO"
-      : opportunity >= 65
-      ? "TEST SHORT FIRST"
-      : "SHELVE";
+  let audienceFit: number;
+  if (bestTopic && highestTopicSim >= 0.35) {
+    const baseFit = Number(bestTopic.audienceFit) || 85;
+    audienceFit = Math.round(baseFit * 0.85 + highestTopicSim * 20);
+  } else if (nicheSim >= 0.28) {
+    audienceFit = Math.round(60 + nicheSim * 35);
+  } else {
+    audienceFit = Math.round(48 + nicheSim * 30);
+  }
+  audienceFit = Math.max(48, Math.min(99, audienceFit));
 
-  const explanation =
-    collisionRisk > 70
-      ? `High collision detected (${collisionRisk}% match with "${topMatch?.videoTitle}"). Shift angle from general explanation to architectural production post-mortem.`
-      : `Strong opportunity score (${opportunity}/100) with low cannibalization risk (${collisionRisk}%). Matches high audience appetite in ${isAgentRelated ? "AI agents" : "developer workflows"}.`;
+  // 3. Real Historical Fit based on detected video format
+  const isDeepDive = /\b(why|architecture|deep dive|internals|breakdown|under the hood|failure|mistakes|post-mortem|truth)\b/i.test(
+    normalizedIdea
+  );
+  const isTutorial = /\b(how to|build|from scratch|guide|tutorial|setup|step by step|create|crash course)\b/i.test(
+    normalizedIdea
+  );
+  const isListicle = /\b(top|best|vs|comparison|alternatives|\b\d+\s+(tools|tips|libraries|ways|mistakes))\b/i.test(
+    normalizedIdea
+  );
 
-  const suggestedAlternative =
-    collisionRisk > 70
-      ? `Reframe as: "What happens when ${idea.replace(/why|how|what/i, "").trim()} hits production: 3 edge cases you will debug"`
-      : `Enhance hook to: "Why most developers misunderstand ${idea.replace(/why|how|what/i, "").trim()} in production"`;
+  const detectedFormat = isDeepDive ? "Deep dive" : isTutorial ? "Practical tutorial" : isListicle ? "Listicle" : "Essay";
+
+  const matchingFormatVideos = (state.channel.videos || []).filter((v: any) => v.format === detectedFormat);
+  let historicalFit: number;
+  if (matchingFormatVideos.length > 0) {
+    const avgViews =
+      matchingFormatVideos.reduce((s: number, v: any) => s + (v.views || 0), 0) / matchingFormatVideos.length;
+    const baseline = state.channel.averageViews || 41300;
+    const ratio = avgViews / baseline;
+    const avgEngagement =
+      matchingFormatVideos.reduce((s: number, v: any) => s + (v.engagementRate || 6.5), 0) /
+      matchingFormatVideos.length;
+    historicalFit = Math.round(68 + (ratio - 1) * 30 + (avgEngagement - 6) * 3);
+  } else {
+    historicalFit = isDeepDive ? 88 : isTutorial ? 84 : isListicle ? 72 : 75;
+  }
+  historicalFit = Math.max(45, Math.min(98, historicalFit));
+
+  // 4. Real Novelty Score
+  const catalogTokens = new Set<string>();
+  (state.channel.videos || []).forEach((v: any) => {
+    extractMeaningfulTokens(v.title).forEach((tok) => catalogTokens.add(tok));
+  });
+  const novelTokens = Array.from(ideaTokens).filter((t) => !catalogTokens.has(t));
+  const noveltyRatio = ideaTokens.size > 0 ? novelTokens.length / ideaTokens.size : 0.5;
+  const novelty = Math.max(20, Math.min(98, Math.round((100 - collisionRisk) * 0.7 + noveltyRatio * 30)));
+
+  // 5. Section 50 Linear Attribution Formula
+  // Score = 0.35 * AudienceFit + 0.30 * HistoricalFit + 0.25 * Novelty - 0.10 * CollisionRisk
+  const opportunity = Math.max(
+    10,
+    Math.min(
+      99,
+      Math.round(audienceFit * 0.35 + historicalFit * 0.3 + novelty * 0.25 - collisionRisk * 0.1)
+    )
+  );
+
+  // 6. Recommendation Verdict (REFRAME when collision >= 55%, else GO)
+  const shouldReframe = collisionRisk >= 55;
+  const isOffNiche = audienceFit < 48;
+  const recommendation = shouldReframe ? "REFRAME" : "GO";
+
+  // 7. Dynamic Core Subject Extraction
+  const coreSubject = idea
+    .replace(/^(how to|why|what is|the best way to|a guide to|how i|top \d+|5 |10 |3 |building a|i built an|i made an)\s+/i, "")
+    .replace(/[?.!]+$/, "")
+    .trim() || idea;
+
+  // 8. Truly Dynamic Suggested Alternative (not a generic repeated string!)
+  let suggestedAlternative: string;
+  if (shouldReframe) {
+    suggestedAlternative = isTutorial
+      ? `Pivot from introductory tutorial to high-stakes post-mortem: "${coreSubject}: 3 Production Bottlenecks and How We Resolved Them"`
+      : isDeepDive
+      ? `Shift to an empirical benchmark breakdown: "Testing ${coreSubject} Under 10,000 Concurrent Loads: What Actually Broke"`
+      : `Reframe angle to unaddressed tradeoffs: "Why We Swapped Our ${coreSubject} Architecture: Real Production Lessons"`;
+  } else if (isOffNiche) {
+    suggestedAlternative = `Bridge into your ${state.channel.niche || "channel"} audience: "How to Build an Automated ${coreSubject} Pipeline for Practitioners"`;
+  } else if (opportunity >= 74) {
+    suggestedAlternative = isTutorial
+      ? `Lead with immediate outcome: "Building a Production-Ready ${coreSubject} in 30 Minutes (Full Architecture)"`
+      : isDeepDive
+      ? `Hook on high-leverage insight: "The ${coreSubject} Architecture That Solves 90% of Performance Degradation"`
+      : `High-conversion title: "${coreSubject} Explained: What 99% of Tutorials Get Completely Wrong"`;
+  } else {
+    suggestedAlternative = `De-risk as a 45-second Short first: "The Single Biggest Mistake Beginners Make With ${coreSubject}"`;
+  }
+
+  // 9. Fully Tailored Strategic Explanation
+  let explanation: string;
+  if (shouldReframe) {
+    explanation = `High collision risk detected (${collisionRisk}% vector similarity with "${topMatch?.videoTitle}"). Making another broad video on this topic risks splitting audience watch-time and cannibalizing your 48-hour CTR. Pivot the angle toward specific edge cases, architectural trade-offs, or production benchmarks.`;
+  } else if (isOffNiche) {
+    explanation = `Low audience fit (${audienceFit}/100). This topic has low topical alignment with your channel's established pillar (${state.channel.niche || state.channel.topTopic}). Unless framed as an automation or bridge tool, your core subscriber base will drop off within 30 seconds.`;
+  } else {
+    const topicLabel = bestTopic?.name || state.channel.topTopic || "core content";
+    explanation = `Strong greenlight opportunity (${opportunity}/100) with low cannibalization risk (${collisionRisk}%). High resonance with your ${topicLabel} audience (Audience fit: ${audienceFit}, Historical fit: ${historicalFit} for ${detectedFormat}). Vector distance from your existing ${state.channel.videos?.length || 42} catalog uploads confirms this explores fresh territory.`;
+  }
 
   return {
+    idea,
     recommendation,
     opportunity,
     audienceFit,
@@ -498,7 +594,8 @@ export function syncIngestedChannelToClientState(channelData: any): any {
 
   state.pulse = state.pulse || {};
   state.pulse.baselineViews = averageViews || 41300;
-  state.pulse.creatorName = state.channel.name;
+  // Keep the creator user's name intact; do not overwrite with ingested channel
+  state.pulse.creatorName = state.settings?.name || state.pulse?.creatorName || "Alex Rivera";
   state.pulse.headline = `Channel intelligence updated for ${state.channel.name}.`;
   state.pulse.trend = "+24% vs. previous period";
   state.pulse.growthOpportunities = 7;
@@ -515,11 +612,18 @@ export function syncIngestedChannelToClientState(channelData: any): any {
     prediction: { direction: "Above creator baseline", confidence: 0.82, baselineMultiplier: 1.7 },
   };
 
+  // DO NOT overwrite state.settings.name or state.settings.niche when ingesting channels!
+  // Settings belong strictly to the creator user and should only change in Settings.
   if (!state.settings) {
-    state.settings = {};
+    state.settings = {
+      name: "Alex Rivera",
+      niche: "AI engineering and developer tools",
+      audience: "18–34 year-old developers building with AI",
+      tone: "Practical, candid, technically rigorous",
+      goals: ["Grow subscribers", "Increase qualified views", "Build authority"],
+      platforms: ["YouTube", "Shorts", "X"],
+    };
   }
-  state.settings.name = state.channel.name;
-  state.settings.niche = state.channel.niche;
 
   // Reset and seed activity with authentic channel ingestion actions
   state.activity = [
@@ -778,13 +882,15 @@ export async function handleClientApi(method: string, path: string, body?: any):
   if (cleanPath === "/api/channel/reset" && method === "POST") {
     state.channel = clone(SEED_STATE.channel as any);
     state.opportunities = clone(SEED_STATE.opportunities as any) as any[];
-    state.pulse.creatorName = SEED_STATE.pulse.creatorName;
+    state.pulse.creatorName = state.settings?.name || SEED_STATE.pulse.creatorName;
     state.pulse.baselineViews = SEED_STATE.pulse.baselineViews;
     state.pulse.recommended = state.opportunities[0];
     state.pulse.headline = SEED_STATE.pulse.headline;
-    if (state.settings) {
-      state.settings.name = SEED_STATE.pulse.creatorName;
-      state.settings.niche = SEED_STATE.channel.niche;
+    if (!state.settings) {
+      state.settings = {
+        name: SEED_STATE.pulse.creatorName,
+        niche: SEED_STATE.channel.niche,
+      };
     }
     state.activity.unshift({
       id: `act-${Date.now()}`,

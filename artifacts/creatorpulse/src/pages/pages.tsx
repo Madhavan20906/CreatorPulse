@@ -367,7 +367,9 @@ export function Dashboard() {
   if (pulse.isLoading) return <Shell><LoadingState/></Shell>;
   if (pulse.isError || !pulse.data) return <Shell><ErrorState onRetry={() => pulse.refetch()}/></Shell>;
   const p = pulse.data;
-  const creatorFirst = ((p?.creatorName || 'Creator').trim().split(/\s+/)[0]) || 'Creator';
+  const settingsQuery = useGetSettings();
+  const creatorName = settingsQuery.data?.name?.trim() || p?.creatorName || 'Alex Rivera';
+  const creatorFirst = (creatorName.split(/\s+/)[0]) || 'Creator';
   const rawRec = p?.recommended || {
     id: 'opp-production-agents',
     title: 'Why AI agents work in a demo but fail in production',
