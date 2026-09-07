@@ -22,6 +22,9 @@ export function ShortVideoGenerator({
   const [isRecording, setIsRecording] = useState(false);
   const [recordProgress, setRecordProgress] = useState(0);
 
+  const [styleTheme, setStyleTheme] = useState<'neon' | 'obsidian' | 'matrix'>('neon');
+  const [audioEnabled, setAudioEnabled] = useState(true);
+
   const hook = initialHook || 'Your AI agent works in demo but crashes in prod.';
   const words = (hook + ' ' + (initialScript ? initialScript.slice(0, 140) : 'Here is the 1 architecture rule you need.')).split(' ');
 
@@ -46,7 +49,7 @@ export function ShortVideoGenerator({
       isRunning = false;
       if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
     };
-  }, [isPlaying, hook, initialScript, topic]);
+  }, [isPlaying, hook, initialScript, topic, styleTheme]);
 
   const renderFrame = () => {
     const canvas = canvasRef.current;
@@ -63,11 +66,36 @@ export function ShortVideoGenerator({
     const loopDuration = 6.0; // 6 second loop
     const t = elapsed % loopDuration;
 
+    // Palette per styleTheme
+    const palette = {
+      neon: {
+        bg1: '#0d111d',
+        bg2: '#161b2e',
+        accent1: '#d8f66a',
+        accent2: '#ff694b',
+        glow: 'rgba(216, 246, 106, 0.18)',
+      },
+      obsidian: {
+        bg1: '#090d16',
+        bg2: '#101726',
+        accent1: '#38bdf8',
+        accent2: '#c084fc',
+        glow: 'rgba(56, 189, 248, 0.2)',
+      },
+      matrix: {
+        bg1: '#051208',
+        bg2: '#0b2012',
+        accent1: '#4ade80',
+        accent2: '#a3e635',
+        glow: 'rgba(74, 222, 128, 0.22)',
+      },
+    }[styleTheme];
+
     // 1. Background gradient
     const bgGrad = ctx.createLinearGradient(0, 0, width, height);
-    bgGrad.addColorStop(0, '#0d111d');
-    bgGrad.addColorStop(0.5, '#161b2e');
-    bgGrad.addColorStop(1, '#090b14');
+    bgGrad.addColorStop(0, palette.bg1);
+    bgGrad.addColorStop(0.5, palette.bg2);
+    bgGrad.addColorStop(1, '#05070c');
     ctx.fillStyle = bgGrad;
     ctx.fillRect(0, 0, width, height);
 
@@ -75,8 +103,8 @@ export function ShortVideoGenerator({
     const glowX = width * 0.5 + Math.sin(t * 1.5) * 80;
     const glowY = height * 0.4 + Math.cos(t * 1.2) * 100;
     const radialGrad = ctx.createRadialGradient(glowX, glowY, 20, glowX, glowY, 320);
-    radialGrad.addColorStop(0, 'rgba(216, 246, 106, 0.18)');
-    radialGrad.addColorStop(0.5, 'rgba(255, 105, 75, 0.12)');
+    radialGrad.addColorStop(0, palette.glow);
+    radialGrad.addColorStop(0.5, 'rgba(255, 105, 75, 0.08)');
     radialGrad.addColorStop(1, 'transparent');
     ctx.fillStyle = radialGrad;
     ctx.fillRect(0, 0, width, height);
@@ -87,12 +115,12 @@ export function ShortVideoGenerator({
     ctx.fillText(authorHandle, 40, 70);
 
     // Topic Pill
-    ctx.fillStyle = '#d8f66a';
+    ctx.fillStyle = palette.accent1;
     ctx.beginPath();
     ctx.roundRect(width - 210, 48, 170, 34, 17);
     ctx.fill();
 
-    ctx.fillStyle = '#20243b';
+    ctx.fillStyle = '#0f172a';
     ctx.font = '900 13px sans-serif';
     ctx.textAlign = 'center';
     ctx.fillText(topic.toUpperCase().slice(0, 16), width - 125, 70);
@@ -112,14 +140,13 @@ export function ShortVideoGenerator({
       const bx = startX + i * (barWidth + gap);
       const by = waveY - barHeight / 2;
 
-      ctx.fillStyle = i % 2 === 0 ? '#d8f66a' : '#ff694b';
+      ctx.fillStyle = i % 2 === 0 ? palette.accent1 : palette.accent2;
       ctx.beginPath();
       ctx.roundRect(bx, by, barWidth, barHeight, 4);
       ctx.fill();
     }
 
     // 5. Kinetic Hook Subtitles (Center Bottom)
-    // Word reveal synchronized with timeline
     const totalWords = words.length;
     const wordIndex = Math.min(totalWords - 1, Math.floor((t / loopDuration) * totalWords));
 
@@ -130,7 +157,7 @@ export function ShortVideoGenerator({
     // Subtitle Container Box
     const boxY = height * 0.56;
     ctx.fillStyle = 'rgba(15, 18, 32, 0.88)';
-    ctx.strokeStyle = 'rgba(216, 246, 106, 0.4)';
+    ctx.strokeStyle = palette.accent1;
     ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.roundRect(36, boxY, width - 72, 180, 20);
@@ -139,7 +166,6 @@ export function ShortVideoGenerator({
 
     // Render subtitle text line by line
     ctx.textAlign = 'center';
-    const activeWordInSlice = wordIndex - startWordIdx;
 
     let line1 = currentSlice.slice(0, 4).join(' ');
     let line2 = currentSlice.slice(4).join(' ');
@@ -149,7 +175,7 @@ export function ShortVideoGenerator({
     ctx.fillText(line1, width / 2, boxY + 70);
 
     if (line2) {
-      ctx.fillStyle = '#d8f66a';
+      ctx.fillStyle = palette.accent1;
       ctx.fillText(line2, width / 2, boxY + 125);
     }
     ctx.textAlign = 'left';
@@ -161,7 +187,7 @@ export function ShortVideoGenerator({
     ctx.roundRect(40, height - 70, width - 80, 6, 3);
     ctx.fill();
 
-    ctx.fillStyle = '#ff694b';
+    ctx.fillStyle = palette.accent2;
     ctx.beginPath();
     ctx.roundRect(40, height - 70, progressWidth, 6, 3);
     ctx.fill();
@@ -170,7 +196,7 @@ export function ShortVideoGenerator({
     ctx.font = 'bold 14px monospace';
     ctx.fillText(`00:0${Math.floor(t)} / 00:0${loopDuration}`, 40, height - 90);
 
-    ctx.fillStyle = '#d8f66a';
+    ctx.fillStyle = palette.accent1;
     ctx.font = 'bold 13px sans-serif';
     ctx.fillText('⚡ YOUTUBE SHORTS AUTOMATION', width - 260, height - 90);
   };
@@ -187,11 +213,39 @@ export function ShortVideoGenerator({
     try {
       setIsRecording(true);
       setRecordProgress(10);
-      toast.info('Rendering 60fps vertical Shorts video from canvas...');
+      toast.info('Synthesizing 60fps vertical Shorts video with audio track...');
 
       // Capture 30fps stream from canvas
       const stream = (canvas as any).captureStream(30);
-      const mimeTypes = ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm'];
+
+      // WebAudio Synthesizer: embeds real audio waveform into the video file stream!
+      let audioCtx: AudioContext | null = null;
+      if (audioEnabled) {
+        try {
+          const AudioCtxClass = window.AudioContext || (window as any).webkitAudioContext;
+          if (AudioCtxClass) {
+            audioCtx = new AudioCtxClass();
+            const dest = audioCtx.createMediaStreamDestination();
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(110, audioCtx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(55, audioCtx.currentTime + 5.5);
+            gain.gain.setValueAtTime(0.06, audioCtx.currentTime);
+            osc.connect(gain);
+            gain.connect(dest);
+            osc.start();
+            const audioTrack = dest.stream.getAudioTracks()[0];
+            if (audioTrack) {
+              stream.addTrack(audioTrack);
+            }
+          }
+        } catch (audioErr) {
+          console.warn('Audio synthesis note:', audioErr);
+        }
+      }
+
+      const mimeTypes = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm'];
       const supportedMime = mimeTypes.find((m) => MediaRecorder.isTypeSupported(m)) || 'video/webm';
 
       const recorder = new MediaRecorder(stream, {
@@ -205,6 +259,9 @@ export function ShortVideoGenerator({
       };
 
       recorder.onstop = () => {
+        if (audioCtx) {
+          try { audioCtx.close(); } catch {}
+        }
         const blob = new Blob(chunks, { type: supportedMime });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -217,7 +274,7 @@ export function ShortVideoGenerator({
         URL.revokeObjectURL(url);
         setIsRecording(false);
         setRecordProgress(100);
-        toast.success(`Successfully rendered and downloaded video (youtube-short-${safeTitle}.webm)!`);
+        toast.success(`Successfully synthesized and downloaded video with audio (youtube-short-${safeTitle}.webm)!`);
       };
 
       recorder.start();
@@ -239,6 +296,7 @@ export function ShortVideoGenerator({
       toast.error(`Recording failed: ${err.message || 'Unknown error'}`);
     }
   };
+
 
   return (
     <div className="rounded-2xl border border-border bg-card p-5 shadow-sm">
@@ -275,6 +333,37 @@ export function ShortVideoGenerator({
         </div>
       </div>
 
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-b border-border/50 pb-3">
+        <div className="flex items-center gap-2">
+          <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">Style Theme:</span>
+          {(['neon', 'obsidian', 'matrix'] as const).map((thm) => (
+            <button
+              key={thm}
+              onClick={() => setStyleTheme(thm)}
+              className={`rounded-lg px-2.5 py-1 text-xs font-bold capitalize transition-all ${
+                styleTheme === thm
+                  ? 'bg-primary text-primary-foreground shadow-sm'
+                  : 'bg-secondary text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              {thm}
+            </button>
+          ))}
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setAudioEnabled(!audioEnabled)}
+            className={`rounded-lg px-2.5 py-1 text-xs font-bold transition-all border ${
+              audioEnabled
+                ? 'border-[#d8f66a]/40 bg-[#d8f66a]/15 text-foreground'
+                : 'border-border bg-secondary text-muted-foreground'
+            }`}
+          >
+            {audioEnabled ? '🔊 Audio Synthesizer: ON' : '🔇 Audio: Muted'}
+          </button>
+        </div>
+      </div>
+
       <div className="mt-5 grid grid-cols-1 md:grid-cols-[280px_1fr] gap-6 items-center">
         {/* Phone Mockup Frame */}
         <div className="mx-auto w-[240px] h-[426px] overflow-hidden rounded-[32px] border-4 border-[#3c415e] bg-black shadow-2xl relative">
@@ -299,7 +388,7 @@ export function ShortVideoGenerator({
                 <span className="text-muted-foreground">Frame Rate:</span> <strong>30–60 FPS Smooth</strong>
               </div>
               <div>
-                <span className="text-muted-foreground">Codec:</span> <strong>VP9/VP8 WebM (Universal)</strong>
+                <span className="text-muted-foreground">Audio Track:</span> <strong>WebAudio Synthesized Tone</strong>
               </div>
             </div>
           </div>
@@ -314,7 +403,7 @@ export function ShortVideoGenerator({
 
           <div className="flex items-center gap-2 text-[11px] text-muted-foreground mono">
             <CheckCircle2 size={13} className="text-[#72920f]" />
-            Direct in-browser client video synthesis · zero external GPU servers required
+            Direct in-browser client video & audio synthesis · zero external GPU servers required
           </div>
         </div>
       </div>

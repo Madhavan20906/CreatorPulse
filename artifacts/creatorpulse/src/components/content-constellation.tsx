@@ -79,21 +79,49 @@ export function ContentConstellation({ videos = [], candidateIdea }: ContentCons
     return list;
   }, [videos, candidateIdea]);
 
+  const [collisionThreshold, setCollisionThreshold] = useState<number>(50);
+  const [customIdeaInput, setCustomIdeaInput] = useState<string>('');
+  const [activeCandidate, setActiveCandidate] = useState(candidateIdea);
+
+  const handleSimulateCustomIdea = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!customIdeaInput.trim()) return;
+
+    const lower = customIdeaInput.toLowerCase();
+    // Compute quick semantic match against existing nodes
+    const matches = nodes
+      .map((n) => {
+        const words = lower.split(/\s+/).filter((w) => w.length > 2);
+        const nodeWords = n.title.toLowerCase().split(/\s+/);
+        const overlap = words.filter((w) => nodeWords.includes(w)).length;
+        const sim = Math.min(95, Math.round(overlap * 24 + (lower.includes(n.topic.toLowerCase()) ? 20 : 10)));
+        return { videoTitle: n.title, similarity: sim };
+      })
+      .sort((a, b) => b.similarity - a.similarity)
+      .slice(0, 3);
+
+    const topSim = matches[0]?.similarity || 18;
+    setActiveCandidate({
+      title: customIdeaInput,
+      topic: 'Live Sandbox Concept',
+      collisionRisk: topSim,
+      similarVideos: matches,
+    });
+  };
+
   // Candidate node in center-right or related topic cluster
   const candidateNode: ConstellationNode | null = useMemo(() => {
-    if (!candidateIdea || !candidateIdea.title) return null;
+    if (!activeCandidate || !activeCandidate.title) return null;
     const width = 800;
     const height = 480;
-    // Find closest node to position near it
     let targetX = width / 2;
     let targetY = height / 2;
 
-    const topSimilar = candidateIdea.similarVideos?.[0];
+    const topSimilar = activeCandidate.similarVideos?.[0];
     if (topSimilar) {
       const matchNode = nodes.find((n) => n.title.toLowerCase() === topSimilar.videoTitle.toLowerCase());
       if (matchNode) {
-        // If collision risk is high, position VERY CLOSE to existing video
-        const dist = Math.max(40, 180 - (candidateIdea.collisionRisk * 1.5));
+        const dist = Math.max(40, 180 - (activeCandidate.collisionRisk * 1.5));
         targetX = matchNode.x + dist * 0.6;
         targetY = matchNode.y - dist * 0.4;
       }
@@ -101,25 +129,25 @@ export function ContentConstellation({ videos = [], candidateIdea }: ContentCons
 
     return {
       id: 'candidate-idea-node',
-      title: candidateIdea.title,
-      topic: candidateIdea.topic,
+      title: activeCandidate.title,
+      topic: activeCandidate.topic,
       views: 0,
       x: Math.max(60, Math.min(width - 60, targetX)),
       y: Math.max(60, Math.min(height - 60, targetY)),
-      similarity: candidateIdea.collisionRisk,
+      similarity: activeCandidate.collisionRisk,
       isCandidate: true,
     };
-  }, [candidateIdea, nodes]);
+  }, [activeCandidate, nodes]);
 
   // Find connection links to candidate
   const links = useMemo(() => {
-    if (!candidateNode || !candidateIdea?.similarVideos) return [];
+    if (!candidateNode || !activeCandidate?.similarVideos) return [];
 
-    return candidateIdea.similarVideos.slice(0, 3).map((sv) => {
+    return activeCandidate.similarVideos.slice(0, 3).map((sv) => {
       const target = nodes.find((n) => n.title.toLowerCase() === sv.videoTitle.toLowerCase());
       if (!target) return null;
 
-      const isCollision = sv.similarity >= 50;
+      const isCollision = sv.similarity >= collisionThreshold;
       return {
         source: candidateNode,
         target,
@@ -127,7 +155,7 @@ export function ContentConstellation({ videos = [], candidateIdea }: ContentCons
         isCollision,
       };
     }).filter(Boolean);
-  }, [candidateNode, candidateIdea, nodes]);
+  }, [candidateNode, activeCandidate, nodes, collisionThreshold]);
 
   const filteredNodes = nodes.filter((n) => {
     if (selectedTopic !== 'all' && n.topic !== selectedTopic) return false;
@@ -164,17 +192,51 @@ export function ContentConstellation({ videos = [], candidateIdea }: ContentCons
           </div>
           <div className="flex items-center gap-1.5">
             <span className="h-1 w-6 bg-[#ff4d4d]" />
-            <span className="text-[#ff6b6b]">Collision Vector (≥50%)</span>
+            <span className="text-[#ff6b6b]">Collision Vector (≥{collisionThreshold}%)</span>
           </div>
           <div className="flex items-center gap-1.5">
             <span className="h-1 w-6 bg-[#4ade80]" />
-            <span className="text-[#4ade80]">Novelty Vector (&lt;50%)</span>
+            <span className="text-[#4ade80]">Novelty Vector (&lt;{collisionThreshold}%)</span>
           </div>
         </div>
       </div>
 
+      {/* Interactive Controls Bar: Threshold Slider & Sandbox Input */}
+      <div className="mt-4 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4 rounded-xl border border-[#2d324d] bg-[#0c0f1c] p-3 text-xs">
+        <div className="flex items-center gap-3">
+          <span className="font-bold text-[#d8f66a] whitespace-nowrap">Collision Threshold: {collisionThreshold}%</span>
+          <input
+            type="range"
+            min="35"
+            max="75"
+            value={collisionThreshold}
+            onChange={(e) => setCollisionThreshold(Number(e.target.value))}
+            className="w-32 accent-[#d8f66a] cursor-pointer"
+          />
+          <span className="text-[11px] text-[#9ea1b5] hidden sm:inline">
+            (Concepts above {collisionThreshold}% overlap glow red)
+          </span>
+        </div>
+
+        <form onSubmit={handleSimulateCustomIdea} className="flex items-center gap-2 flex-1 max-w-md">
+          <input
+            type="text"
+            placeholder="Type any idea to test collision (e.g. Rust vs Go microservices)..."
+            value={customIdeaInput}
+            onChange={(e) => setCustomIdeaInput(e.target.value)}
+            className="flex-1 rounded-lg border border-[#2d324d] bg-[#1a1f36] px-3 py-1.5 text-xs text-white placeholder:text-[#9ea1b5]/60"
+          />
+          <button
+            type="submit"
+            className="rounded-lg bg-[#38bdf8] px-3 py-1.5 text-xs font-bold text-[#0f172a] hover:bg-[#2cb2ed] transition-all whitespace-nowrap"
+          >
+            Test Vector
+          </button>
+        </form>
+      </div>
+
       {/* Topic Filter Pills */}
-      <div className="mt-4 flex flex-wrap items-center gap-2 text-xs">
+      <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
         <button
           onClick={() => setSelectedTopic('all')}
           className={`rounded-lg px-2.5 py-1 font-bold transition-all text-[11px] ${

@@ -259,6 +259,32 @@ export function ThumbnailStudio({
     }
   };
 
+  const handleCopyImage = () => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    try {
+      canvas.toBlob(async (blob) => {
+        if (!blob) {
+          toast.error('Could not generate image blob.');
+          return;
+        }
+        if (navigator.clipboard && (window as any).ClipboardItem) {
+          await navigator.clipboard.write([
+            new (window as any).ClipboardItem({ 'image/png': blob }),
+          ]);
+          toast.success('Thumbnail image copied to clipboard (ready to paste in Figma/Photoshop)!');
+        } else {
+          toast.info('Direct clipboard image copy not supported in this browser; use Download button.');
+        }
+      });
+    } catch (err) {
+      toast.error('Clipboard copy failed.');
+    }
+  };
+
+  const PRESET_BADGES = ['99% CRASH', 'DO NOT DEPLOY', 'THE HARD WAY', '2026 BENCHMARK', 'DEMO ≠ PROD'];
+
   return (
     <div className="rounded-2xl border border-border bg-card p-5 shadow-sm">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border/70 pb-4">
@@ -270,16 +296,43 @@ export function ThumbnailStudio({
             Live 1280×720 YouTube Thumbnail Generator
           </h3>
           <p className="text-xs text-muted-foreground">
-            Renders high-impact YouTube Studio thumbnail art client-side in Canvas with instant PNG download.
+            Renders high-impact YouTube Studio thumbnail art client-side in Canvas with instant PNG export or clipboard copy.
           </p>
         </div>
-        <button
-          onClick={handleDownload}
-          className="inline-flex items-center gap-2 rounded-xl bg-[#d8f66a] px-4 py-2 text-xs font-bold text-[#20243b] hover:bg-[#c9e859] transition-all shadow-sm shrink-0"
-          data-testid="button-download-thumbnail"
-        >
-          <Download size={14} /> Download Thumbnail (.png)
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleCopyImage}
+            className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-secondary px-3 py-2 text-xs font-bold hover:bg-secondary/80 transition-all"
+            data-testid="button-copy-thumbnail"
+          >
+            Copy Image
+          </button>
+          <button
+            onClick={handleDownload}
+            className="inline-flex items-center gap-2 rounded-xl bg-[#d8f66a] px-4 py-2 text-xs font-bold text-[#20243b] hover:bg-[#c9e859] transition-all shadow-sm shrink-0"
+            data-testid="button-download-thumbnail"
+          >
+            <Download size={14} /> Download Thumbnail (.png)
+          </button>
+        </div>
+      </div>
+
+      {/* Preset Badges */}
+      <div className="mt-3 flex flex-wrap items-center gap-1.5 text-xs">
+        <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider mr-1">Quick Hooks:</span>
+        {PRESET_BADGES.map((badge) => (
+          <button
+            key={badge}
+            onClick={() => setHeadline(badge)}
+            className={`rounded-md px-2 py-0.5 text-[11px] font-bold border transition-all ${
+              headline === badge
+                ? 'border-[#d8f66a] bg-[#d8f66a]/15 text-[#d8f66a]'
+                : 'border-border bg-secondary/60 text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            {badge}
+          </button>
+        ))}
       </div>
 
       {/* Canvas Preview */}
