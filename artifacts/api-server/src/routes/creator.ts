@@ -37,7 +37,9 @@ import {
   loadCreatorState,
   saveCreatorState,
 } from "../lib/creator-state";
-import { POPULAR_REAL_CHANNELS, deriveTopicsFromVideos, deriveOpportunitiesForChannel } from "../lib/real-channels";
+import { deriveTopicsFromVideos, deriveOpportunitiesForChannel } from "../lib/real-channels";
+import { fetchLiveYouTubeCatalog, fetchLiveVideoMetrics } from "../lib/youtube-fetcher";
+import { publishToYouTube } from "../lib/youtube-publisher";
 
 const router: IRouter = Router();
 
@@ -64,20 +66,7 @@ router.post("/channel/ingest", async (req, res): Promise<void> => {
   let resolvedVideos: any[] = [];
   let dataMode = "Live YouTube public catalog";
 
-  const cleanHandleKey = (channelUrlOrHandle || "").trim().toLowerCase();
-  const preset = Object.entries(POPULAR_REAL_CHANNELS).find(
-    ([key]) => cleanHandleKey.includes(key.replace("@", "")) || cleanHandleKey === key
-  );
-
-  if (preset) {
-    const p = preset[1];
-    resolvedName = p.name;
-    resolvedHandle = p.handle;
-    resolvedNiche = p.niche;
-    resolvedSubscribers = p.subscribers;
-    resolvedVideos = JSON.parse(JSON.stringify(p.videos));
-    dataMode = p.dataMode;
-  } else if (Array.isArray(customVideos) && customVideos.length > 0) {
+  if (Array.isArray(customVideos) && customVideos.length > 0) {
     resolvedName = channelName || "Imported Channel";
     resolvedHandle = channelUrlOrHandle ? (channelUrlOrHandle.startsWith("@") ? channelUrlOrHandle : `@${channelUrlOrHandle}`) : "@customchannel";
     resolvedVideos = customVideos.map((v: any, idx: number) => ({
@@ -92,24 +81,29 @@ router.post("/channel/ingest", async (req, res): Promise<void> => {
       hook: v.hook || v.title || "",
     }));
     dataMode = `Imported creator history (${resolvedVideos.length} videos)`;
-  } else {
-    const handleClean = (channelUrlOrHandle || "creator").replace(/^https?:\/\/(www\.)?youtube\.com\//, "").replace(/^\//, "");
-    const formattedHandle = handleClean.startsWith("@") ? handleClean : `@${handleClean}`;
-    const baseName = formattedHandle.replace("@", "").replace(/[^a-zA-Z0-9]/g, " ").trim();
-    resolvedName = channelName || baseName.split(" ").map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ") || "YouTube Creator";
-    resolvedHandle = formattedHandle;
-    resolvedNiche = niche || "Digital Creation, AI, and Technology";
+  } else if (channelUrlOrHandle && channelUrlOrHandle.trim()) {
+    const rawInput = channelUrlOrHandle.trim();
 
-    const sampleTopics = ["Analysis & Deep Dives", "Practical Tutorials", "Frameworks & Systems", "Reviews & Critique"];
-    resolvedVideos = [
-      { id: "pub-1", title: `The complete guide to ${resolvedNiche} in 2026`, topic: sampleTopics[0], format: "Deep dive", views: 185000, engagementRate: 8.4, publishedAt: "2026-08-20", duration: "16:40", hook: `Why most creators approach ${resolvedNiche} backwards.` },
-      { id: "pub-2", title: `5 mistakes I made building my channel to 100k`, topic: sampleTopics[1], format: "Practical tutorial", views: 142000, engagementRate: 7.9, publishedAt: "2026-08-05", duration: "12:15", hook: "The metrics that look good vs the metrics that pay your rent." },
-      { id: "pub-3", title: `Why the standard workflow is broken`, topic: sampleTopics[2], format: "Essay", views: 98000, engagementRate: 7.1, publishedAt: "2026-07-22", duration: "14:50", hook: "We tested the popular advice for 6 months." },
-      { id: "pub-4", title: `Behind the scenes: My full tech and production stack`, topic: sampleTopics[1], format: "Practical tutorial", views: 165000, engagementRate: 8.8, publishedAt: "2026-07-08", duration: "19:30", hook: "Every tool, camera setting, and AI system I use to publish weekly." },
-      { id: "pub-5", title: `The future of our industry in 10 minutes`, topic: sampleTopics[3], format: "Deep dive", views: 220000, engagementRate: 9.1, publishedAt: "2026-06-25", duration: "10:15", hook: "Three structural shifts that will redefine how we create." },
-      { id: "pub-6", title: `How to stay consistent without burning out`, topic: sampleTopics[2], format: "Essay", views: 88000, engagementRate: 6.8, publishedAt: "2026-06-11", duration: "11:20", hook: "Systems outlast motivation every single time." },
-    ];
-    dataMode = `Live public YouTube catalog (${resolvedVideos.length} uploads)`;
+    // Strictly fetch live public YouTube catalog via YouTube Atom/RSS feed and channel page
+    try {
+      const liveProfile = await fetchLiveYouTubeCatalog(rawInput);
+      resolvedName = channelName || liveProfile.name;
+      resolvedHandle = liveProfile.handle;
+      resolvedNiche = niche || liveProfile.niche;
+      resolvedSubscribers = liveProfile.subscribers;
+      resolvedVideos = liveProfile.videos;
+      dataMode = liveProfile.dataMode;
+    } catch (fetchErr: any) {
+      res.status(400).json({
+        error: fetchErr.message || `Failed to ingest YouTube channel "${rawInput}".`,
+      });
+      return;
+    }
+  } else {
+    res.status(400).json({
+      error: "Please provide a valid YouTube channel handle or URL, or upload video history.",
+    });
+    return;
   }
 
   const totalViews = resolvedVideos.reduce((sum: number, v: any) => sum + (v.views || 0), 0);
@@ -207,19 +201,23 @@ router.post("/opportunities/:id/generate", async (req, res): Promise<void> => {
     return;
   }
 
-  const generated = await buildContentPackage(opportunity, body.data.voice, body.data.extraContext);
-  const content = generated.content;
-  state.contentPackages[content.id] = content;
-  opportunity.status = "in production";
-  addActivity(state, {
-    agent: "Content Factory",
-    action: "Generated content package",
-    detail: `${generated.source === "gemini" ? "Gemini-generated" : "Deterministic fallback"} · ${content.shorts.length} Shorts, SEO metadata, and a long-form script ready for review`,
-    timestamp: "Just now",
-    status: "complete",
-  });
-  await saveCreatorState(state);
-  res.json(GenerateContentResponse.parse(content));
+  try {
+    const generated = await buildContentPackage(opportunity, body.data.voice, body.data.extraContext);
+    const content = generated.content;
+    state.contentPackages[content.id] = content;
+    opportunity.status = "in production";
+    addActivity(state, {
+      agent: "Content Factory",
+      action: "Generated content package",
+      detail: `Gemini-generated · ${content.shorts.length} Shorts, SEO metadata, and a long-form script ready for review`,
+      timestamp: "Just now",
+      status: "complete",
+    });
+    await saveCreatorState(state);
+    res.json(GenerateContentResponse.parse(content));
+  } catch (genErr: any) {
+    res.status(400).json({ error: genErr.message || "Failed to generate content" });
+  }
 });
 
 router.get("/content/:id", async (req, res): Promise<void> => {
@@ -279,8 +277,10 @@ router.post("/content/:id/approve", async (req, res): Promise<void> => {
     return;
   }
 
-  content.status = "scheduled";
+  const publishResult = await publishToYouTube(content);
+  content.status = publishResult.status === "published" ? "published" : "scheduled";
   content.scheduledFor = body.data.scheduledFor;
+  content.publishResult = publishResult;
 
   const scheduledDate = new Date(body.data.scheduledFor);
   const dayName = isNaN(scheduledDate.getTime()) ? "MON 20" : scheduledDate.toLocaleDateString("en-US", { weekday: "short" }).toUpperCase();
@@ -293,7 +293,7 @@ router.post("/content/:id/approve", async (req, res): Promise<void> => {
       title: content.title,
       type: "LONG-FORM",
       scheduledFor: body.data.scheduledFor,
-      status: "Approved",
+      status: publishResult.status === "published" ? "Published" : "Approved",
       slot: `${dayName} ${dayNum} · ${timeStr}`,
     },
     ...(state.scheduled || []).filter((s: any) => s.id !== `sched-${content.id}`),
@@ -301,13 +301,27 @@ router.post("/content/:id/approve", async (req, res): Promise<void> => {
 
   addActivity(state, {
     agent: "Publisher",
-    action: "Scheduled content package",
-    detail: `Approved & synced to calendar · ${dayName} ${dayNum}`,
+    action: publishResult.status === "published" ? "Published to YouTube channel" : "Generated YouTube Release Pack",
+    detail: publishResult.message,
     timestamp: "Just now",
     status: "complete",
   });
   await saveCreatorState(state);
   res.json(ApproveContentResponse.parse(content));
+});
+
+router.get("/measure/live-sync", async (req, res): Promise<void> => {
+  const videoIdOrUrl = (req.query.videoIdOrUrl as string) || "";
+  if (!videoIdOrUrl) {
+    res.status(400).json({ error: "Missing videoIdOrUrl query parameter" });
+    return;
+  }
+  try {
+    const metrics = await fetchLiveVideoMetrics(videoIdOrUrl);
+    res.json(metrics);
+  } catch (err: any) {
+    res.status(400).json({ error: err.message || "Failed to fetch live video metrics from YouTube" });
+  }
 });
 
 router.post("/before-publish", async (req, res): Promise<void> => {
@@ -546,16 +560,24 @@ router.post("/settings", async (req, res): Promise<void> => {
   res.json(UpdateSettingsResponse.parse(state.memory.identity));
 });
 
-async function buildContentPackage(opportunity: any, voice: string, extraContext = ""): Promise<{ content: any; source: "gemini" | "deterministic" }> {
-  const fallback = buildDeterministicContentPackage(opportunity, voice);
-  try {
-    const generated = await generateGeminiJson(buildGeminiPrompt(opportunity, voice, extraContext));
-    const content = normalizeGeminiPackage(generated, fallback);
-    if (content) return { content, source: "gemini" };
-  } catch (error) {
-    console.warn("Gemini content generation failed; using deterministic fallback.", error instanceof Error ? error.message : "unknown error");
+async function buildContentPackage(opportunity: any, voice: string, extraContext = ""): Promise<{ content: any; source: "gemini" }> {
+  if (!process.env.GEMINI_API_KEY) {
+    throw new Error(
+      "Real content generation requires a valid GEMINI_API_KEY environment variable. Simulated mock generation is disabled. Please set GEMINI_API_KEY to generate real platform-ready scripts."
+    );
   }
-  return { content: fallback, source: "deterministic" };
+
+  const generated = await generateGeminiJson(buildGeminiPrompt(opportunity, voice, extraContext));
+  if (!generated) {
+    throw new Error("Gemini API call returned empty output. Please verify your GEMINI_API_KEY and network connection.");
+  }
+
+  const fallbackTemplate = buildDeterministicContentPackage(opportunity, voice);
+  const content = normalizeGeminiPackage(generated, fallbackTemplate);
+  if (!content) {
+    throw new Error("Failed to parse Gemini generated response into required schema.");
+  }
+  return { content, source: "gemini" };
 }
 
 function buildGeminiPrompt(opportunity: any, voice: string, extraContext: string): string {

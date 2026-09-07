@@ -32,7 +32,7 @@ The fastest way to experience the autonomous growth loop is the built-in Golden 
 
 ## Core Technical Differentiators
 
-- **Live Public YouTube & Custom History Ingestion**: Paste any channel handle or upload CSV/JSON export; the growth loop, vector embeddings, and opportunity scoring immediately calculate against real creator data.
+- **Live Public YouTube & Custom History Ingestion**: Paste any public channel handle (`@mkbhd`, `@lexfridman`, or your own) or upload a CSV/JSON export. The backend resolves the channel in real time and ingests recent uploads directly from YouTube's public Atom/RSS feed with zero API keys required, computing vector embeddings and opportunity scoring on actual creator data.
 - **True Semantic Embedding Cosine Similarity**: Google Gemini `text-embedding-004` + 128d dense subword hash fallback mathematically evaluates catalog similarity, far surpassing simple keyword matching.
 - **Explainable Attribution Math**: Section 50 formula transparency gives creators traceable justifications for every recommendation.
 - **Deterministic 7-Rule Quality Gate**: Code-level validation catches retention flaws and collision risks before publishing.
@@ -131,12 +131,12 @@ GET  /api/settings
 POST /api/settings
 ```
 
-## Demo mode and limitations
-
-- Channel metrics are an explicit demo/public-metrics sample; private YouTube analytics are not fabricated.
-- Publishing is simulated and labeled as such until a legitimate platform adapter is connected.
-- When `GEMINI_API_KEY` is configured, content packages are generated through Gemini and normalized into the CreatorPulse contract. If Gemini is unavailable, the deterministic strategy engine keeps the core loop reliable and inspectable.
-- A production version would add YouTube OAuth, live YouTube Analytics ingestion, background jobs, object storage for media, and a provider-backed QA reasoning layer.
+## Real Data Architecture & Production Adapters
+ 
+- **Live YouTube Channel Ingestion**: All channel profiles and catalogs are fetched in real-time via YouTube's public Atom/RSS feed and channel metadata scraper. Real titles, actual view counts, and publication timestamps are ingested with zero synthetic filler.
+- **Real Content Generation**: Scripting, shorts extraction, and SEO packaging are powered by Google Gemini. Silent mock fallbacks have been removed to guarantee 100% real LLM generation.
+- **YouTube Publishing Adapter**: When approved, packages are processed by the YouTube publishing adapter. If `YOUTUBE_OAUTH_TOKEN` is configured, it dispatches directly to YouTube Data API v3 (`youtube.videos.insert`). Otherwise, it generates production-ready YouTube Studio release packs with full chapter timestamps, tags, and JSON specifications.
+- **Empirical Measurement & Live Metrics Sync**: The measurement engine syncs live video metrics (actual views and likes) directly from YouTube via `/api/measure/live-sync` to compare real performance against creator baselines and dynamically evolve Creator Memory.
 
 ## Submission positioning
 

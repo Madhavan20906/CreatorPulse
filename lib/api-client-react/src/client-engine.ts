@@ -457,23 +457,9 @@ export async function handleClientApi(method: string, path: string, body?: any):
       }));
       dataMode = `Imported creator history (${resolvedVideos.length} videos)`;
     } else {
-      const handleClean = (channelUrlOrHandle || "creator").replace(/^https?:\/\/(www\.)?youtube\.com\//, "").replace(/^\//, "");
-      const formattedHandle = handleClean.startsWith("@") ? handleClean : `@${handleClean}`;
-      const baseName = formattedHandle.replace("@", "").replace(/[^a-zA-Z0-9]/g, " ").trim();
-      resolvedName = channelName || baseName.split(" ").map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ") || "YouTube Creator";
-      resolvedHandle = formattedHandle;
-      resolvedNiche = niche || "Digital Creation, AI, and Technology";
-
-      const sampleTopics = ["Analysis & Deep Dives", "Practical Tutorials", "Frameworks & Systems", "Reviews & Critique"];
-      resolvedVideos = [
-        { id: "pub-1", title: `The complete guide to ${resolvedNiche} in 2026`, topic: sampleTopics[0], format: "Deep dive", views: 185000, engagementRate: 8.4, publishedAt: "2026-08-20", duration: "16:40", hook: `Why most creators approach ${resolvedNiche} backwards.` },
-        { id: "pub-2", title: `5 mistakes I made building my channel to 100k`, topic: sampleTopics[1], format: "Practical tutorial", views: 142000, engagementRate: 7.9, publishedAt: "2026-08-05", duration: "12:15", hook: "The metrics that look good vs the metrics that pay your rent." },
-        { id: "pub-3", title: `Why the standard workflow is broken`, topic: sampleTopics[2], format: "Essay", views: 98000, engagementRate: 7.1, publishedAt: "2026-07-22", duration: "14:50", hook: "We tested the popular advice for 6 months." },
-        { id: "pub-4", title: `Behind the scenes: My full tech and production stack`, topic: sampleTopics[1], format: "Practical tutorial", views: 165000, engagementRate: 8.8, publishedAt: "2026-07-08", duration: "19:30", hook: "Every tool, camera setting, and AI system I use to publish weekly." },
-        { id: "pub-5", title: `The future of our industry in 10 minutes`, topic: sampleTopics[3], format: "Deep dive", views: 220000, engagementRate: 9.1, publishedAt: "2026-06-25", duration: "10:15", hook: "Three structural shifts that will redefine how we create." },
-        { id: "pub-6", title: `How to stay consistent without burning out`, topic: sampleTopics[2], format: "Essay", views: 88000, engagementRate: 6.8, publishedAt: "2026-06-11", duration: "11:20", hook: "Systems outlast motivation every single time." },
-      ];
-      dataMode = `Live public YouTube catalog (${resolvedVideos.length} uploads)`;
+      throw new Error(
+        `Backend API server is required to resolve live YouTube channels via RSS. Please ensure the backend is running or select one of the verified creator presets (@fireship, @mkbhd, @veritasium).`
+      );
     }
 
     const totalViews = resolvedVideos.reduce((sum: number, v: any) => sum + (v.views || 0), 0);
