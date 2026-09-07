@@ -48,11 +48,25 @@ export function Logo({ dark = false }: { dark?: boolean }) {
   return (
     <Link href="/" data-testid="link-logo" className="flex items-center gap-2.5">
       <span
-        className={`grid h-8 w-8 place-items-center rounded-[10px] ${
-          dark ? 'bg-[#d8f66a] text-[#20243b]' : 'bg-[#20243b] text-[#d8f66a]'
+        className={`grid h-8 w-8 place-items-center rounded-[10px] overflow-hidden ${
+          dark ? 'bg-[#292d47] text-[#d8f66a] border border-[#3c415e]' : 'bg-[#20243b] text-[#d8f66a] border border-[#373c5c]'
         }`}
       >
-        <span className="h-3 w-3 rounded-full border-[3px] border-current" />
+        <svg
+          viewBox="0 0 32 32"
+          className="h-5 w-5 fill-none"
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          <circle cx="16" cy="16" r="12" stroke="currentColor" strokeOpacity="0.15" strokeWidth="1.5" />
+          <path
+            d="M 6 16 H 10 L 13 12 L 15 20 L 18 8 L 21 21 L 23 15 L 24 16 H 26"
+            stroke={dark ? '#d8f66a' : '#d8f66a'}
+            strokeWidth="2.2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+          <circle cx="18" cy="8" r="1.5" fill="#efff85" />
+        </svg>
       </span>
       <span
         className={`display text-[17px] font-bold tracking-tight ${
