@@ -364,10 +364,10 @@ export function Dashboard() {
   const activity = useListActivity();
   const channelQuery = useGetChannel();
   const memoryQuery = useGetMemory();
+  const settingsQuery = useGetSettings();
   if (pulse.isLoading) return <Shell><LoadingState/></Shell>;
   if (pulse.isError || !pulse.data) return <Shell><ErrorState onRetry={() => pulse.refetch()}/></Shell>;
   const p = pulse.data;
-  const settingsQuery = useGetSettings();
   const creatorName = settingsQuery.data?.name?.trim() || p?.creatorName || 'Alex Rivera';
   const creatorFirst = (creatorName.split(/\s+/)[0]) || 'Creator';
   const rawRec = p?.recommended || {
