@@ -16,16 +16,34 @@ function unescapeHtml(text) {
 }
 
 function parseSubscriberString(subStr) {
-  if (!subStr) return 150000;
-  const cleaned = subStr.toLowerCase().replace(/subscribers?/i, "").trim();
-  const numMatch = cleaned.match(/([0-9\.]+)\s*([kmb])?/i);
-  if (!numMatch) return 150000;
-  const val = parseFloat(numMatch[1]);
-  const unit = (numMatch[2] || "").toLowerCase();
-  if (unit === "m") return Math.round(val * 1000000);
-  if (unit === "k") return Math.round(val * 1000);
-  if (unit === "b") return Math.round(val * 1000000000);
-  return Math.round(val);
+  if (!subStr) return null;
+  const cleaned = subStr.toLowerCase().replace(/subscribers?/i, "").replace(/,/g, "").trim();
+
+  // 1. Check for million / M
+  const millionMatch = cleaned.match(/([\d\.]+)\s*(?:million|m)/i);
+  if (millionMatch) return Math.round(parseFloat(millionMatch[1]) * 1000000);
+
+  // 2. Check for billion / B
+  const billionMatch = cleaned.match(/([\d\.]+)\s*(?:billion|b)/i);
+  if (billionMatch) return Math.round(parseFloat(billionMatch[1]) * 1000000000);
+
+  // 3. Check for thousand / K
+  const thousandMatch = cleaned.match(/([\d\.]+)\s*(?:thousand|k)/i);
+  if (thousandMatch) return Math.round(parseFloat(thousandMatch[1]) * 1000);
+
+  // 4. Check for lakh / crore (for Indian YouTube channels)
+  const croreMatch = cleaned.match(/([\d\.]+)\s*crore/i);
+  if (croreMatch) return Math.round(parseFloat(croreMatch[1]) * 10000000);
+  const lakhMatch = cleaned.match(/([\d\.]+)\s*lakh/i);
+  if (lakhMatch) return Math.round(parseFloat(lakhMatch[1]) * 100000);
+
+  // 5. Plain number (e.g. "8500" or "8,500")
+  const rawNum = cleaned.match(/([\d\.]+)/);
+  if (rawNum) {
+    const n = parseFloat(rawNum[1]);
+    if (!isNaN(n) && n > 0) return Math.round(n);
+  }
+  return null;
 }
 
 function deriveTopics(videos) {
@@ -175,19 +193,29 @@ async function fetchLiveYouTubeCatalog(channelInput) {
   const descMatch = html.match(/<meta property="og:description" content="([^"]+)"/);
   const channelDesc = descMatch ? unescapeHtml(descMatch[1]) : "";
 
-  // Extract sub count from ytInitialData / HTML
-  const subMatch = html.match(/"subscriberCountText":\{"accessibility":\{"accessibilityData":\{"label":"([^"]+)"\}\}/) ||
-    html.match(/"simpleText":"([\d\.]+[KMBkmb]?\s+subscribers?)"/i) ||
-    html.match(/"label":"([\d\.]+[KMBkmb]?\s+(?:million|thousand|subscribers?))"/i);
-
-  let rawSubscribers = subMatch ? parseSubscriberString(subMatch[1]) : null;
-
-  // Extract duration map from ytInitialData lockupViewModel or thumbnail badges
+  let rawSubscribers = null;
   const durationMap = new Map();
+
+  // Extract from ytInitialData (header subscriber count + lockup durations)
   try {
     const jsonMatch = html.match(/var ytInitialData = ({.*?});<\/script>/);
     if (jsonMatch) {
       const parsedData = JSON.parse(jsonMatch[1]);
+
+      // 1. Dedicated channel header subscriber count
+      if (parsedData.header) {
+        const headerStr = JSON.stringify(parsedData.header);
+        const headerMatches = [...headerStr.matchAll(/([\d\.]+[KMBkmb]?\s*(?:million|thousand|crore|lakh)?\s*subscribers?)/gi)];
+        for (const hm of headerMatches) {
+          const parsed = parseSubscriberString(hm[1]);
+          if (parsed && parsed > 0) {
+            rawSubscribers = parsed;
+            break;
+          }
+        }
+      }
+
+      // 2. Harvest video durations
       function harvestDurations(obj) {
         if (!obj || typeof obj !== "object") return;
         if (obj.lockupViewModel) {
@@ -218,6 +246,24 @@ async function fetchLiveYouTubeCatalog(channelInput) {
     }
   } catch (err) {
     // Gracefully handle ytInitialData parse errors
+  }
+
+  // Fallback 1: Dedicated header view model regex
+  if (!rawSubscribers) {
+    const phm = html.match(/"pageHeaderViewModel"[\s\S]{1,2500}?"content":\{"dynamicTextViewModel":\{"text":\{"content":"([^"]+subscribers?)"/i) ||
+      html.match(/"c4TabbedHeaderRenderer"[\s\S]{1,1000}?"subscriberCountText":\{"accessibility":\{"accessibilityData":\{"label":"([^"]+)"\}\}/i);
+    if (phm) {
+      rawSubscribers = parseSubscriberString(phm[1]);
+    }
+  }
+
+  // Fallback 2: Top channel header section of HTML only (avoiding recommendations)
+  if (!rawSubscribers) {
+    const topChunk = html.slice(0, 100000);
+    const topMatch = topChunk.match(/([\d\.]+[KMBkmb]?\s*(?:million|thousand|crore|lakh)?\s*subscribers?)/i);
+    if (topMatch) {
+      rawSubscribers = parseSubscriberString(topMatch[1]);
+    }
   }
 
   // Fetch Atom RSS Feed

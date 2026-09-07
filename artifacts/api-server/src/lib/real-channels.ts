@@ -24,7 +24,7 @@ export const POPULAR_REAL_CHANNELS: Record<string, PublicChannelProfile> = {
     name: "Fireship",
     handle: "@fireship",
     niche: "High-intensity web development, modern cloud, and AI engineering",
-    subscribers: 3420000,
+    subscribers: 4260000,
     dataMode: "Live YouTube public catalog · Ingested via public data",
     videos: [
       {
@@ -165,7 +165,7 @@ export const POPULAR_REAL_CHANNELS: Record<string, PublicChannelProfile> = {
     name: "Marques Brownlee",
     handle: "@mkbhd",
     niche: "Consumer electronics, frontier gadgets, and technology critique",
-    subscribers: 19400000,
+    subscribers: 21200000,
     dataMode: "Live YouTube public catalog · Ingested via public data",
     videos: [
       {
@@ -262,7 +262,7 @@ export const POPULAR_REAL_CHANNELS: Record<string, PublicChannelProfile> = {
     name: "Veritasium",
     handle: "@veritasium",
     niche: "Counterintuitive physics, scientific investigation, and visual mathematics",
-    subscribers: 16900000,
+    subscribers: 21200000,
     dataMode: "Live YouTube public catalog · Ingested via public data",
     videos: [
       {
