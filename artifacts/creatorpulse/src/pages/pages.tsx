@@ -650,6 +650,7 @@ export function Channel() {
   const [parsedFileVideos, setParsedFileVideos] = useState<any[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [selectedVideo, setSelectedVideo] = useState<any | null>(null);
+  const [selectedTopicFilter, setSelectedTopicFilter] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const handleRefreshAnalysis = async () => {
@@ -1588,6 +1589,7 @@ export function OpportunityDetail() {
 
 function ContentTabs({ content }: { content: ContentPackage }) {
   const [tab, setTab] = useState('Long-form');
+  const channelQuery = useGetChannel();
   const tabs = ['Long-form', 'Shorts', 'Social', 'SEO', 'Thumbnail', 'Release Pack'];
   return (
     <div className="panel overflow-hidden">
@@ -1813,7 +1815,7 @@ function ContentTabs({ content }: { content: ContentPackage }) {
             <div className="mt-6">
               <ThumbnailStudio
                 title={content.title}
-                topic={content.topic}
+                topic={(content as any).topic || 'Creator Strategy'}
                 hook={content.hook}
                 conceptText={content.thumbnail?.text}
               />
@@ -1985,7 +1987,7 @@ export function Shorts() {
           hook={topShort?.hook || q.data.hook || 'Your AI agent works in demo but crashes in production.'}
           script={topShort?.script || q.data.script}
           title={topShort?.title || q.data.title}
-          topic={q.data.topic}
+          topic={(q.data as any).topic || 'AI & Tech'}
           authorHandle={channelQuery.data?.handle || '@creator'}
         />
       </div>

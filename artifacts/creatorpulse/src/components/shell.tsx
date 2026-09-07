@@ -233,11 +233,11 @@ export function Shell({
     <div className="min-h-[100dvh] bg-background">
       {/* Sidebar */}
       <aside
-        className={`fixed inset-y-0 left-0 z-30 flex w-[250px] flex-col bg-sidebar px-4 py-5 text-sidebar-foreground transition-transform duration-300 md:translate-x-0 ${
+        className={`fixed inset-y-0 left-0 z-30 flex w-[250px] flex-col bg-sidebar px-4 py-5 text-sidebar-foreground transition-transform duration-300 md:translate-x-0 sidebar-scroll ${
           open ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
-        <div className="flex items-center justify-between px-2">
+        <div className="flex items-center justify-between px-2 shrink-0">
           <Logo dark />
           <button
             className="rounded-lg p-2 text-sidebar-foreground/70 md:hidden"
@@ -249,7 +249,7 @@ export function Shell({
         </div>
 
         {/* Dynamic Creator Profile Badge */}
-        <div className="mt-9 px-2">
+        <div className="mt-9 px-2 shrink-0">
           <div className="eyebrow !text-sidebar-foreground/45">Operating system</div>
           <Link
             href="/settings"
@@ -315,7 +315,7 @@ export function Shell({
           ))}
         </nav>
 
-        <div className="space-y-1 border-t border-sidebar-border pt-3">
+        <div className="space-y-1 border-t border-sidebar-border pt-3 shrink-0">
           <Link
             href="/before-publish"
             data-testid="link-before-publish"
@@ -334,7 +334,7 @@ export function Shell({
           </Link>
         </div>
 
-        <div className="mt-4 flex items-center gap-2 px-2">
+        <div className="mt-4 flex items-center gap-2 px-2 shrink-0">
           <span className="h-2 w-2 rounded-full bg-[#d8f66a]" />
           <span className="mono text-[9px] uppercase tracking-wider text-sidebar-foreground/45">
             Demo data live
