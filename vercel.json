@@ -1,7 +1,7 @@
 {
   "version": 2,
-  "buildCommand": "pnpm --filter @workspace/creatorpulse run build",
-  "outputDirectory": "artifacts/creatorpulse/dist/public",
+  "buildCommand": "pnpm run build",
+  "outputDirectory": "public",
   "rewrites": [
     {
       "source": "/api/(.*)",
