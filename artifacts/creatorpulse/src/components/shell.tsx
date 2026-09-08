@@ -335,13 +335,6 @@ export function Shell({
             <span>Settings</span>
           </Link>
         </div>
-
-        <div className="mt-4 flex items-center gap-2 px-2 shrink-0">
-          <span className="h-2 w-2 rounded-full bg-[#d8f66a]" />
-          <span className="mono text-[9px] uppercase tracking-wider text-sidebar-foreground/45">
-            Demo data live
-          </span>
-        </div>
       </aside>
 
       {open && (
