@@ -708,20 +708,20 @@ export async function handleClientApi(method: string, path: string, body?: any):
 
     const cleanHandleKey = (channelUrlOrHandle || "").trim().toLowerCase();
 
-    // 1. Mock Presets (Alex Rivera, Sarah Connor)
+    // 1. Reference Presets (Alex Rivera, Sarah Connor)
     if (cleanHandleKey.includes("buildwithalex") || cleanHandleKey.includes("alex")) {
       resolvedName = "Alex Rivera";
       resolvedHandle = "@buildwithalex";
       resolvedNiche = "AI engineering and developer tools";
       resolvedSubscribers = 142000;
       resolvedVideos = clone((SEED_STATE.channel as any).videos);
-      dataMode = "Evaluation Mock Catalog · 42 synthetic videos for offline testing";
+      dataMode = "Evaluation Reference Catalog · 42 synthetic videos for offline testing";
     } else if (cleanHandleKey.includes("sarahcodes") || cleanHandleKey.includes("sarah")) {
       resolvedName = "Sarah Connor";
       resolvedHandle = "@sarahcodes";
       resolvedNiche = "Cloud architecture & cybersecurity";
       resolvedSubscribers = 89000;
-      dataMode = "Evaluation Mock Catalog · Cybersecurity & Cloud";
+      dataMode = "Evaluation Reference Catalog · Cybersecurity & Cloud";
       resolvedVideos = [
         {
           id: "sarah-v1",

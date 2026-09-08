@@ -384,7 +384,7 @@ export async function customFetch<T = unknown>(
       return parsedData;
     }
 
-    if (!response.ok && !isStaticHostMiss) {
+    if (!response.ok && !isStaticHostMiss && response.status !== 404) {
       try {
         const errorJson = await response.json();
         if (errorJson?.error) {
