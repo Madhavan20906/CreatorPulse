@@ -761,47 +761,7 @@ export default async function handler(req, res) {
     return;
   }
 
-  if (url.includes("/api/activity")) {
-    res.status(200).json([
-      { id: "activity-1", agent: "Channel Brain", action: "Analyzed channel library", detail: "42 videos clustered into 4 topic groups", timestamp: "2 min ago", status: "complete" },
-      { id: "activity-2", agent: "Opportunity Agent", action: "Found a content gap", detail: "Production reliability is under-covered despite strong audience fit", timestamp: "1 min ago", status: "complete" },
-      { id: "activity-3", agent: "Growth Planner", action: "Selected next move", detail: "Why AI agents work in a demo but fail in production", timestamp: "Just now", status: "complete" }
-    ]);
-    return;
-  }
 
-  if (url.includes("/api/memory")) {
-    res.status(200).json({
-      version: 3,
-      identity: {
-        name: "Alex Rivera",
-        niche: "AI engineering and developer tools",
-        audience: "18–34 year-old developers building with AI",
-        goals: ["Grow subscribers", "Increase qualified views", "Build authority"],
-        tone: "Practical, candid, technically rigorous"
-      },
-      topicMemory: [
-        { label: "AI agents", signal: "Historically associated with stronger performance", confidence: 94 },
-        { label: "Python tutorials", signal: "Audience fit is present but the library is saturated", confidence: 72 }
-      ],
-      formatMemory: [
-        { label: "Practical tutorial", signal: "Strongest long-form format", confidence: 91 },
-        { label: "Shorts", signal: "Contrarian explainers outperform generic tips", confidence: 86 }
-      ],
-      hookMemory: [
-        { label: "Contrarian", signal: "High performance in recent uploads", confidence: 89 },
-        { label: "Generic educational", signal: "Underperforms channel baseline", confidence: 68 }
-      ],
-      timingMemory: [
-        { label: "Thursday 10:00", signal: "Historically associated with stronger first-day velocity", confidence: 64 }
-      ],
-      learnings: [
-        "Contrarian hooks paired with an AI-agent topic have outperformed the channel baseline.",
-        "The audience responds to practical failure analysis more than broad tool roundups."
-      ]
-    });
-    return;
-  }
 
   // All other API routes are managed in client state engine. Return 404 so customFetch falls back seamlessly.
   res.status(404).json({ error: `Not handled by serverless API; handled by client engine: ${url}` });

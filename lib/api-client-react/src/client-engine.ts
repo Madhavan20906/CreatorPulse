@@ -597,6 +597,140 @@ export function buildContentPackageClient(opportunity: any, voice = "Practical, 
   };
 }
 
+export function recordActivityTrace(state: ClientCreatorState, item: {
+  agent: string;
+  action: string;
+  detail: string;
+  category?: string;
+  status?: string;
+}) {
+  if (!Array.isArray(state.activity)) state.activity = [];
+  state.activity.unshift({
+    id: `act-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+    agent: item.agent,
+    action: item.action,
+    detail: item.detail,
+    timestamp: "Just now",
+    status: item.status || "complete",
+  });
+  if (state.activity.length > 100) {
+    state.activity = state.activity.slice(0, 100);
+  }
+}
+
+export function logUserActivityTrace(agent: string, action: string, detail: string) {
+  if (typeof window === "undefined") return;
+  const state = getClientState();
+  recordActivityTrace(state, { agent, action, detail });
+  saveClientState(state);
+}
+
+export function generateMemoryForChannel(channel: any): any {
+  if (!channel) return null;
+  const videos = Array.isArray(channel.videos) ? channel.videos : [];
+  const topics = Array.isArray(channel.topics) && channel.topics.length ? channel.topics : deriveTopicsFromVideos(videos);
+
+  // Dynamic Topic Memory from channel's actual top topics
+  const topicMemory = topics.slice(0, 3).map((top: any, idx: number) => {
+    const conf = Math.min(99, Math.max(62, Number(top.audienceFit) || (idx === 0 ? 94 : idx === 1 ? 82 : 71)));
+    const signal = idx === 0
+      ? `Historically associated with peak converting watch-time in ${channel.name}'s library`
+      : idx === 1
+      ? `Solid secondary pillar with consistent baseline retention and low drop-off`
+      : `Audience affinity verified, but requires high-novelty hooks to prevent cannibalization`;
+    return {
+      label: top.name,
+      signal,
+      confidence: conf,
+    };
+  });
+
+  // Dynamic Format Memory from channel's actual video formats
+  const formatCounts: Record<string, { count: number; views: number }> = {};
+  videos.forEach((v: any) => {
+    const fmt = v.format || "Practical tutorial";
+    if (!formatCounts[fmt]) formatCounts[fmt] = { count: 0, views: 0 };
+    formatCounts[fmt].count++;
+    formatCounts[fmt].views += v.views || 0;
+  });
+
+  const sortedFormats = Object.entries(formatCounts).sort((a, b) => (b[1].views / Math.max(1, b[1].count)) - (a[1].views / Math.max(1, a[1].count)));
+  const topFormatName = sortedFormats[0]?.[0] || "Practical tutorial";
+  const secondFormatName = sortedFormats[1]?.[0] || (topFormatName === "Shorts" ? "Deep dive" : "Shorts");
+
+  const formatMemory = [
+    {
+      label: topFormatName,
+      signal: `Strongest converting long-form format for ${channel.name}`,
+      confidence: Math.min(98, Math.max(76, Math.round(84 + (videos.length > 10 ? 7 : 2)))),
+    },
+    {
+      label: secondFormatName,
+      signal: "High distribution velocity with strong algorithmic browse engagement",
+      confidence: Math.min(92, Math.max(66, Math.round(78 + (videos.length > 20 ? 6 : 2)))),
+    },
+  ];
+
+  // Dynamic Hook Memory
+  const hookMemory = [
+    {
+      label: "Contrarian / Problem-First",
+      signal: `Outperforms channel baseline across recent ${channel.name} uploads`,
+      confidence: Math.min(96, Math.max(75, Math.round(86 + (channel.subscribers > 500000 ? 5 : 0)))),
+    },
+    {
+      label: "Generic Educational",
+      signal: "Underperforms baseline; lacks tension and clear stakes",
+      confidence: Math.min(74, Math.max(55, Math.round(66 - (videos.length > 15 ? 4 : 0)))),
+    },
+  ];
+
+  // Dynamic Timing Memory from video publish days
+  const days = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+  const dayCounts: Record<string, number> = {};
+  videos.forEach((v: any) => {
+    if (v.publishedAt) {
+      const d = new Date(v.publishedAt);
+      if (!isNaN(d.getDay())) {
+        const dayName = days[d.getDay()];
+        dayCounts[dayName] = (dayCounts[dayName] || 0) + 1;
+      }
+    }
+  });
+  const bestDay = Object.entries(dayCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || "Thursday";
+  const timingMemory = [
+    {
+      label: `${bestDay} 10:00`,
+      signal: `Historically associated with stronger first-day velocity for ${channel.name}`,
+      confidence: Math.min(88, Math.max(62, Math.round(64 + (videos.length > 10 ? 8 : 2)))),
+    },
+  ];
+
+  const primaryTopic = topics[0]?.name || "Core Content";
+  const learnings = [
+    `Contrarian framing paired with ${primaryTopic} consistently beats ${channel.name}'s baseline velocity.`,
+    `The ${channel.niche || "channel"} audience responds far more to real constraints and post-mortems than broad listicles.`,
+    `Maintaining a 90-day semantic distance against recent uploads prevents 48-hour CTR cannibalization.`,
+  ];
+
+  return {
+    version: 3,
+    identity: {
+      name: channel.name,
+      niche: channel.niche,
+      audience: `Engaged audience watching ${channel.name}`,
+      goals: ["Grow subscribers", "Increase qualified views", "Build authority"],
+      tone: "Practical, candid, technically rigorous",
+      platforms: ["YouTube", "Shorts", "X"],
+    },
+    topicMemory,
+    formatMemory,
+    hookMemory,
+    timingMemory,
+    learnings,
+  };
+}
+
 export function syncIngestedChannelToClientState(channelData: any): any {
   if (!channelData || typeof channelData !== "object") return;
   const state = getClientState();
@@ -639,6 +773,9 @@ export function syncIngestedChannelToClientState(channelData: any): any {
     prediction: { direction: "Above creator baseline", confidence: 0.82, baselineMultiplier: 1.7 },
   };
 
+  // Generate dynamic memory tailored to this specific channel
+  state.memory = generateMemoryForChannel(state.channel);
+
   if (!state.settings) {
     state.settings = {
       name: activeStoredCreator,
@@ -652,33 +789,22 @@ export function syncIngestedChannelToClientState(channelData: any): any {
     state.settings.name = activeStoredCreator;
   }
 
-  // Reset and seed activity with authentic channel ingestion actions
-  state.activity = [
-    {
-      id: `act-${Date.now()}-1`,
-      agent: "Channel Brain",
-      action: "Ingested live channel catalog",
-      detail: `Swapped catalog to ${state.channel.name} (${state.channel.handle}) · ${resolvedVideos.length} public uploads analyzed`,
-      timestamp: "Just now",
-      status: "complete",
-    },
-    {
-      id: `act-${Date.now()}-2`,
-      agent: "Opportunity Agent",
-      action: "Derived content pillars",
-      detail: `Classified ${state.channel.topics?.length || 2} audience pillars for ${state.channel.niche}`,
-      timestamp: "Just now",
-      status: "complete",
-    },
-    {
-      id: `act-${Date.now()}-3`,
-      agent: "Growth Planner",
-      action: "Calibrated growth opportunities",
-      detail: `Selected recommended play: "${state.pulse.recommended?.title || 'Core Opportunity'}"`,
-      timestamp: "Just now",
-      status: "complete",
-    },
-  ];
+  // Prepend new authentic channel ingestion actions without destroying prior trace history
+  recordActivityTrace(state, {
+    agent: "Growth Planner",
+    action: "Calibrated growth opportunities",
+    detail: `Selected recommended play: "${state.pulse.recommended?.title || 'Core Opportunity'}"`,
+  });
+  recordActivityTrace(state, {
+    agent: "Opportunity Agent",
+    action: "Derived content pillars",
+    detail: `Classified ${state.channel.topics?.length || 2} audience pillars for ${state.channel.niche}`,
+  });
+  recordActivityTrace(state, {
+    agent: "Channel Brain",
+    action: "Ingested live channel catalog",
+    detail: `Swapped catalog to ${state.channel.name} (${state.channel.handle}) · ${resolvedVideos.length} public uploads analyzed`,
+  });
 
   saveClientState(state);
   return state.channel;
@@ -975,20 +1101,41 @@ export async function handleClientApi(method: string, path: string, body?: any):
     if (state.contentPackages[id]) return state.contentPackages[id];
     const catalogVideo = state.channel.videos.find((v: any) => v.id === id);
     if (catalogVideo) {
+      const topic = catalogVideo.topic || state.channel.topTopic || "Core Strategy";
       return {
         id: catalogVideo.id,
         title: catalogVideo.title,
-        topic: catalogVideo.topic,
-        prediction: { direction: "Above creator baseline" },
+        topic,
+        description: `Complete architectural walkthrough of ${catalogVideo.title}. Real-world tradeoffs, benchmark failure modes, and production-tested patterns for ${topic}.`,
+        script: `## Hook (00:00)\n${catalogVideo.hook || `Most creators approach ${topic} from the wrong angle.`}\n\n## Section 1: The Core Failure Mode (02:30)\nWhen scaling ${topic} under production load, unaddressed bottlenecks quickly degrade throughput.\n\n## Section 2: Concrete Implementation (07:15)\nHere is the verified architecture and implementation checklist.\n\n## Section 3: Actionable Next Steps (12:45)\nCheck out the GitHub repository linked below and subscribe for more deep dives.`,
+        cta: "Check out the GitHub repository linked in the description below and subscribe for more technical deep dives.",
+        seo: {
+          primaryKeyword: topic,
+          secondaryKeywords: [topic, "Best Practices", "Architecture"],
+          tags: [topic, "Engineering", "Tutorial", "Guide"],
+        },
+        prediction: { direction: "Above creator baseline", confidence: 0.82, baselineMultiplier: 1.45 },
         status: "published",
       };
     }
+    const firstOpp = state.opportunities?.[0];
+    const topVid = state.channel.videos?.[0];
+    const fallbackTitle = firstOpp?.title || topVid?.title || "Why AI agents work in a demo but fail in production";
+    const fallbackTopic = firstOpp?.topic || topVid?.topic || state.channel?.topTopic || "AI agents";
     return {
       id,
-      title: id === "video-41" ? "The MCP architecture I wish I had started with" : "AI Agent Architecture Deep Dive",
-      topic: id === "video-41" ? "Developer workflows" : "AI agents",
-      prediction: { direction: "Above creator baseline" },
-      status: "published",
+      title: fallbackTitle,
+      topic: fallbackTopic,
+      description: `In-depth technical breakdown of ${fallbackTitle}. Covers operational tradeoffs, retention structure, and verified benchmarks.`,
+      script: `## Hook (00:00)\nMost implementations look flawless in a demo, but crumble under real load.\n\n## Section 1: The Edge Cases (03:10)\nWithout deterministic checkpoints, recursive agent loops drift into execution deadlocks.\n\n## Section 2: The Production Architecture (08:20)\nHere is the robust pattern that enforces reliability at scale.\n\n## Section 3: Summary & Resources (13:40)\nSubscribe to the channel and clone the repository below to test this yourself.`,
+      cta: "Subscribe to the channel and check out the repository in the description below.",
+      seo: {
+        primaryKeyword: fallbackTopic,
+        secondaryKeywords: [fallbackTopic, "Production", "Architecture"],
+        tags: [fallbackTopic, "Production", "Tutorial"],
+      },
+      prediction: { direction: "Above creator baseline", confidence: 0.85, baselineMultiplier: 1.7 },
+      status: "draft",
     };
   }
 
@@ -998,12 +1145,10 @@ export async function handleClientApi(method: string, path: string, body?: any):
     const id = qaMatch[1];
     const report = calculateQuality(body || {});
     state.qualityReports[id] = report;
-    state.activity.unshift({
-      id: `act-${Date.now()}`,
+    recordActivityTrace(state, {
       agent: "QA Agent",
-      action: "Ran content health gate",
-      detail: `Health ${report.overall}/100 · ${report.passed ? "ready for creator review" : "needs revision"}`,
-      timestamp: "Just now",
+      action: "Ran deterministic QA gate",
+      detail: `Health score: ${report.overall}/100 on "${(body?.title || id).slice(0, 36)}" · ${report.passed ? "approved" : "revision flagged"}`,
       status: report.passed ? "complete" : "attention",
     });
     saveClientState(state);
@@ -1017,13 +1162,10 @@ export async function handleClientApi(method: string, path: string, body?: any):
     const pkg = state.contentPackages[id] || { id, title: "Content Package" };
     pkg.status = "approved";
     state.contentPackages[id] = pkg;
-    state.activity.unshift({
-      id: `act-${Date.now()}`,
+    recordActivityTrace(state, {
       agent: "Publishing Agent",
       action: "Content package approved",
       detail: `Approved "${pkg.title}" for release across YouTube and Shorts`,
-      timestamp: "Just now",
-      status: "complete",
     });
     saveClientState(state);
     return { success: true, packageId: id, status: "approved" };
@@ -1032,7 +1174,14 @@ export async function handleClientApi(method: string, path: string, body?: any):
   // Evaluate idea (handles both /api/before-publish and /api/evaluate-idea)
   if ((cleanPath === "/api/before-publish" || cleanPath === "/api/evaluate-idea") && method === "POST") {
     const idea = body?.data?.idea || body?.idea || (typeof body === "string" ? body : "Why productive creators are building slower systems");
-    return evaluateIdeaClient(state, idea);
+    const result = evaluateIdeaClient(state, idea);
+    recordActivityTrace(state, {
+      agent: "Signal Agent",
+      action: "Evaluated candidate idea",
+      detail: `"${idea.slice(0, 42)}${idea.length > 42 ? '...' : ''}" · Verdict: ${result.recommendation} (${result.opportunity}/100)`,
+    });
+    saveClientState(state);
+    return result;
   }
 
   // Live YouTube Sync
@@ -1054,6 +1203,13 @@ export async function handleClientApi(method: string, path: string, body?: any):
         if (odata.title) title = odata.title;
       }
     } catch {}
+
+    recordActivityTrace(state, {
+      agent: "Measure Agent",
+      action: "Synced live YouTube metrics",
+      detail: `Parsed video "${title.slice(0, 36)}" · ${views.toLocaleString()} views`,
+    });
+    saveClientState(state);
 
     return {
       videoId,

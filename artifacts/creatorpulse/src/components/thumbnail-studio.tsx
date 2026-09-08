@@ -59,24 +59,44 @@ const THEMES = [
 
 export function ThumbnailStudio({
   title: initialTitle,
-  topic = 'AI Engineering',
-  hook = 'Production Failure Modes Explained',
+  topic = 'General Focus',
+  hook = 'Key Research Finding',
   authorHandle = '@creator',
-  conceptText = 'DEMO ≠ PRODUCTION',
+  conceptText,
 }: ThumbnailStudioProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  function deriveInitialStat(t: string, h: string): { num: string; label: string } {
+    const combined = `${t} ${h}`.toLowerCase();
+    const numMatch = t.match(/\b(\d+)\b/);
+    if (numMatch) {
+      return { num: numMatch[1], label: 'CRITICAL STEPS' };
+    }
+    if (/fail|mistake|wrong|bug|broke/.test(combined)) {
+      return { num: 'FATAL', label: 'FLAW EXPOSED' };
+    }
+    if (/scale|growth|fast|master|secret/.test(combined)) {
+      return { num: '10X', label: 'PROVEN SYSTEM' };
+    }
+    if (/never|stop|warning/.test(combined)) {
+      return { num: 'AVOID', label: 'THIS TRAP' };
+    }
+    return { num: 'TOP 1%', label: 'CORE INSIGHT' };
+  }
+
+  const initialStat = deriveInitialStat(initialTitle || '', hook || '');
   const [headline, setHeadline] = useState(conceptText || titleToPunchyText(initialTitle));
   const [topicBadge, setTopicBadge] = useState(topic);
-  const [calloutText, setCalloutText] = useState('THE UNCOMFORTABLE TRUTH');
+  const [calloutText, setCalloutText] = useState(hook ? (hook.length > 30 ? hook.slice(0, 28).toUpperCase() + '...' : hook.toUpperCase()) : 'PROVEN BREAKTHROUGH');
+  const [statNumber, setStatNumber] = useState(initialStat.num);
+  const [statLabel, setStatLabel] = useState(initialStat.label);
   const [themeIdx, setThemeIdx] = useState(0);
   const [showGrid, setShowGrid] = useState(true);
 
   function titleToPunchyText(t: string): string {
-    if (!t) return 'PRODUCTION READY';
-    if (t.toLowerCase().includes('demo') && t.toLowerCase().includes('production')) {
-      return 'DEMO ≠ PROD';
-    }
-    const words = t.split(/\s+/).filter((w) => w.length > 2);
+    if (!t) return 'RESEARCHED BREAKTHROUGH';
+    const cleaned = t.replace(/^(why most|the \d+ fatal mistakes in|what no one tells you about|how to|building an?)\s+/i, '');
+    const words = (cleaned || t).split(/\s+/).filter((w) => w.length > 2);
     return words.slice(0, 4).join(' ').toUpperCase();
   }
 
@@ -87,11 +107,17 @@ export function ThumbnailStudio({
       setHeadline(titleToPunchyText(initialTitle));
     }
     if (topic) setTopicBadge(topic.toUpperCase());
-  }, [initialTitle, topic, conceptText]);
+    if (hook) {
+      setCalloutText(hook.length > 30 ? hook.slice(0, 28).toUpperCase() + '...' : hook.toUpperCase());
+    }
+    const stat = deriveInitialStat(initialTitle || '', hook || '');
+    setStatNumber(stat.num);
+    setStatLabel(stat.label);
+  }, [initialTitle, topic, conceptText, hook]);
 
   useEffect(() => {
     renderCanvas();
-  }, [headline, topicBadge, calloutText, themeIdx, showGrid]);
+  }, [headline, topicBadge, calloutText, statNumber, statLabel, themeIdx, showGrid]);
 
   const renderCanvas = () => {
     const canvas = canvasRef.current;
@@ -222,22 +248,22 @@ export function ThumbnailStudio({
     ctx.stroke();
 
     ctx.fillStyle = theme.titleColor;
-    ctx.font = '900 68px sans-serif';
+    ctx.font = statNumber.length <= 4 ? '900 68px sans-serif' : '900 52px sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText('97%', cx, cy + 10);
-    ctx.font = 'bold 20px monospace';
+    ctx.fillText(statNumber, cx, cy + 10);
+    ctx.font = 'bold 18px monospace';
     ctx.fillStyle = theme.accent;
-    ctx.fillText('TIME SAVED', cx, cy + 50);
+    ctx.fillText(statLabel.slice(0, 16), cx, cy + 50);
     ctx.textAlign = 'left';
 
-    // 10. Bottom Footer: Handle & Verification Stamp
+    // 10. Bottom Footer: Handle & Professional YouTube Studio Stamp
     ctx.fillStyle = 'rgba(255, 255, 255, 0.65)';
     ctx.font = 'bold 24px monospace';
     ctx.fillText(authorHandle, badgeX, height - 70);
 
     ctx.fillStyle = theme.accent;
     ctx.font = 'bold 20px monospace';
-    ctx.fillText('● CREATORPULSE AUTOMATED ASSET · 1080P READY', width - 640, height - 70);
+    ctx.fillText('● 4K ULTRA-HD READY · OPTIMIZED FOR YOUTUBE FEED', width - 640, height - 70);
   };
 
   const handleDownload = () => {
@@ -345,7 +371,7 @@ export function ThumbnailStudio({
       </div>
 
       {/* Quick Controls */}
-      <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+      <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 text-xs">
         <div>
           <label className="eyebrow block mb-1">Headline Text</label>
           <input
@@ -367,19 +393,40 @@ export function ThumbnailStudio({
           />
         </div>
         <div>
+          <label className="eyebrow block mb-1">Focus Stat / Callout</label>
+          <div className="grid grid-cols-2 gap-1.5">
+            <input
+              type="text"
+              value={statNumber}
+              onChange={(e) => setStatNumber(e.target.value.toUpperCase())}
+              placeholder="e.g. 5 or FATAL"
+              className="w-full rounded-lg border border-input bg-background px-2 py-1.5 font-bold uppercase"
+              title="Metric or key word (e.g. 5, FATAL, 10X)"
+            />
+            <input
+              type="text"
+              value={statLabel}
+              onChange={(e) => setStatLabel(e.target.value.toUpperCase())}
+              placeholder="e.g. FLAWS"
+              className="w-full rounded-lg border border-input bg-background px-2 py-1.5 font-bold uppercase"
+              title="Label beneath the stat"
+            />
+          </div>
+        </div>
+        <div>
           <label className="eyebrow block mb-1">Theme Palette</label>
-          <div className="flex gap-2">
+          <div className="flex gap-1.5">
             {THEMES.map((th, idx) => (
               <button
                 key={th.id}
                 onClick={() => setThemeIdx(idx)}
-                className={`flex-1 rounded-lg border px-2 py-1.5 font-bold transition-all text-[11px] ${
+                className={`flex-1 rounded-lg border px-1.5 py-1.5 font-bold transition-all text-[10px] truncate ${
                   themeIdx === idx
                     ? 'border-[#d8f66a] bg-[#20243b] text-[#d8f66a]'
                     : 'border-border bg-secondary text-muted-foreground hover:bg-secondary/80'
                 }`}
               >
-                {th.name}
+                {th.name.split(' ')[0]}
               </button>
             ))}
           </div>

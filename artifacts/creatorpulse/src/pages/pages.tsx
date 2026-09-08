@@ -1867,8 +1867,9 @@ function ContentTabs({ content }: { content: ContentPackage }) {
             <div className="mt-6">
               <ThumbnailStudio
                 title={content.title}
-                topic={(content as any).topic || 'Creator Strategy'}
+                topic={(content as any).topic || channelQuery.data?.topTopic || 'Creator Strategy'}
                 hook={content.hook}
+                authorHandle={channelQuery.data?.handle || '@creator'}
                 conceptText={content.thumbnail?.text}
               />
             </div>
@@ -2071,12 +2072,47 @@ export function QA() {
   const { id: routeId } = useParams<{ id: string }>();
   const id = routeId || getLastContentId();
   const content = useGetContent(id);
+  const channelQuery = useGetChannel();
   const run = useRunQualityGate();
   const [report, setReport] = useState<QualityReport | null>(null);
+
+  const [auditTarget, setAuditTarget] = useState<{
+    title: string;
+    description: string;
+    script: string;
+    cta: string;
+    keywords: string[];
+  } | null>(null);
+
+  useEffect(() => {
+    if (content.data && !auditTarget) {
+      const initTarget = {
+        title: content.data.title || "Why AI agents work in a demo but fail in production",
+        description: content.data.description || "A deep dive into failure modes, architectural boundaries, and production verification for autonomous agentic systems.",
+        script: content.data.script || "## Hook (00:00)\nMost creators build for demos rather than production reality.\n\n## Section 1: Failure Modes (02:45)\nRecursive loops drift without explicit checkpoint barriers.\n\n## Section 2: Deterministic Governance (07:30)\nHere is the verified architecture.\n\n## Section 3: Next Steps (12:00)\nCheck out GitHub below and subscribe for more deep dives.",
+        cta: content.data.cta || "Check out the GitHub repository below and subscribe for more in-depth engineering breakdowns.",
+        keywords: content.data.seo?.tags || ["AI agents", "Production", "Architecture"],
+      };
+      setAuditTarget(initTarget);
+      run.mutate({ id, data: initTarget }, { onSuccess: setReport });
+    }
+  }, [content.data]);
+
+  const executeAudit = (target = auditTarget) => {
+    if (!target) return;
+    run.mutate({ id, data: target }, { onSuccess: setReport });
+  };
+
+  const setPreset = (target: { title: string; description: string; script: string; cta: string; keywords: string[] }) => {
+    setAuditTarget(target);
+    executeAudit(target);
+  };
+
   if (content.isLoading) return <Shell><LoadingState label="Preparing quality gate"/></Shell>;
-  if (content.isError || !content.data) return <Shell><EmptyState title="Nothing to verify" detail="A content package needs to exist before the quality gate can run." action={<Button href="/create" testId="button-create-for-qa">Create a package</Button>}/></Shell>;
-  const c = content.data;
-  const execute = () => run.mutate({ id, data: { title: c.title, description: c.description, script: c.script, cta: c.cta, keywords: c.seo?.tags || [] } }, { onSuccess: setReport });
+
+  const c = content.data || { title: "Draft Package", id };
+  const currentTitle = auditTarget?.title || c.title || "Content Package";
+
   return (
     <Shell eyebrow="Verify" title="Quality gate">
       <PageIntro
@@ -2084,14 +2120,66 @@ export function QA() {
         title="Make the promise hold up."
         description="A deterministic 7-rule pass across clarity, claims, retention structure, and SEO distribution."
         action={
-          <Button onClick={execute} disabled={run.isPending} variant="coral" testId="button-run-quality-gate">
-            {run.isPending ? 'Checking…' : 'Run quality gate'} <ShieldCheckIcon/>
+          <Button onClick={() => executeAudit()} disabled={run.isPending} variant="coral" testId="button-run-quality-gate">
+            {run.isPending ? 'Checking…' : 'Re-verify quality gate'} <ShieldCheckIcon/>
           </Button>
         }
       />
+
+      {/* Dynamic Package / Draft Tester Selector */}
+      <div className="mb-6 flex flex-wrap items-center gap-2">
+        <span className="mono text-[10px] text-muted-foreground">Test Candidates:</span>
+        <button
+          type="button"
+          onClick={() => setPreset({
+            title: `Why Most ${channelQuery.data?.topTopic || 'AI Engineering'} Deployments Break Down at Scale`,
+            description: "A comprehensive production post-mortem analyzing real runtime constraints, memory drift, and verified architectural patterns.",
+            script: "## Hook (00:00)\nMost implementations look flawless on localhost, but crash under production traffic.\n\n## Section 1: Bottlenecks (03:15)\nUncontrolled recursive loops drift into catastrophic memory exhaustion.\n\n## Section 2: Robust Mitigation (08:40)\nHere is the deterministic framework to enforce reliability at scale.\n\n## Section 3: Code & Summary (13:20)\nSubscribe to the channel and clone the repository below to test this yourself.",
+            cta: "Subscribe to the channel and check out the repository in the description below.",
+            keywords: [channelQuery.data?.topTopic || "AI Engineering", "Production", "Architecture"],
+          })}
+          className="rounded-lg border border-border bg-secondary/60 px-2.5 py-1 text-[11px] font-semibold hover:border-primary hover:bg-primary/10 transition-colors"
+        >
+          🚀 Optimal Production Draft (~93)
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setPreset({
+            title: "This 100% Guaranteed Tool Will Make You Millions Overnight Without Any Effort",
+            description: "Short promo summary.",
+            script: "This revolutionary secret sauce is mind-blowing. It will foolproof solve all your problems 100% guaranteed.",
+            cta: "Click here.",
+            keywords: ["Secret", "Money"],
+          })}
+          className="rounded-lg border border-border bg-secondary/60 px-2.5 py-1 text-[11px] font-semibold hover:border-red-400 hover:bg-red-500/10 transition-colors text-red-300"
+        >
+          ⚠️ Flawed Hype Draft (~58)
+        </button>
+
+        {channelQuery.data?.videos?.[0] && (
+          <button
+            type="button"
+            onClick={() => setPreset({
+              title: channelQuery.data.videos[0].title,
+              description: `A focused examination of ${channelQuery.data.videos[0].title}. Lessons from the live YouTube upload with concrete technical guidance.`,
+              script: `## Hook (00:00)\n${channelQuery.data.videos[0].hook || 'Here is the truth.'}\n\n## Section 1: Key Problem (02:10)\nExamining the underlying mechanics.\n\n## Section 2: The Solution (06:40)\nStep by step resolution.\n\n## Section 3: Wrap Up\nCheck out the link below and drop a comment with your thoughts.`,
+              cta: "Check out the link in the description below and leave a comment.",
+              keywords: [channelQuery.data.videos[0].topic || "Tutorial", "Guide"],
+            })}
+            className="rounded-lg border border-border bg-secondary/60 px-2.5 py-1 text-[11px] font-semibold hover:border-primary hover:bg-primary/10 transition-colors"
+          >
+            📹 Catalog: {channelQuery.data.videos[0].title.slice(0, 24)}... (~82)
+          </button>
+        )}
+      </div>
+
       <div className="grid gap-5 xl:grid-cols-[.7fr_1.3fr]">
         <div className="panel p-7">
           <div className="eyebrow">Health score</div>
+          <div className="mt-2 text-xs font-bold text-muted-foreground truncate" title={currentTitle}>
+            Auditing: <span className="text-foreground">"{currentTitle}"</span>
+          </div>
           <div className="mt-4 flex items-end gap-2">
             <span className="display text-7xl font-bold">{report?.overall ?? '—'}</span>
             <span className="mono mb-3 text-xs text-muted-foreground">/100</span>
@@ -2562,9 +2650,15 @@ export function Analytics() {
                 {syncedVideo ? `Active upload: "${syncedVideo.title}"` : `Last 30 days / ${channelDisplayName} channel`}
               </p>
             </div>
-            <span className="mono rounded-lg bg-[#edf3c9] px-2 py-1 text-[10px] text-[#72920f]">
+            <span className={`mono rounded-lg px-2 py-1 text-[10px] ${
+              syncedVideo
+                ? (syncedVideo.views >= (channel?.averageViews || 41300) ? 'bg-[#edf3c9] text-[#72920f]' : 'bg-[#fbe1d6] text-[#c36b4d]')
+                : 'bg-[#edf3c9] text-[#72920f]'
+            }`}>
               {syncedVideo
-                ? `${(syncedVideo.views / (channel?.averageViews || 41300)).toFixed(1)}× baseline (${syncedVideo.views.toLocaleString()} views)`
+                ? (syncedVideo.views >= (channel?.averageViews || 41300)
+                    ? `+${(((syncedVideo.views / (channel?.averageViews || 41300)) - 1) * 100).toFixed(1)}% vs baseline (${syncedVideo.views.toLocaleString()} views)`
+                    : `-${((1 - (syncedVideo.views / (channel?.averageViews || 41300))) * 100).toFixed(1)}% vs baseline (${syncedVideo.views.toLocaleString()} views)`)
                 : '+18.6%'}
             </span>
           </div>
@@ -2572,21 +2666,57 @@ export function Analytics() {
             <div className="absolute inset-x-0 top-1/4 border-t border-dashed border-border" />
             <div className="absolute inset-x-0 top-2/4 border-t border-dashed border-border" />
             <div className="absolute inset-x-0 top-3/4 border-t border-dashed border-border" />
-            <svg viewBox="0 0 700 220" preserveAspectRatio="none" className="absolute inset-0 h-full w-full overflow-visible">
-              <path
-                d="M0,172 C55,161 72,165 118,140 S190,147 225,117 S290,126 334,94 S396,114 431,78 S500,91 535,63 S605,79 700,33"
-                fill="none"
-                stroke="#20243b"
-                strokeWidth="3"
-              />
-              <path
-                d="M0,188 C80,180 130,171 180,167 S280,148 350,140 S490,120 700,99"
-                fill="none"
-                stroke="#f28b67"
-                strokeDasharray="6 6"
-                strokeWidth="2"
-              />
-            </svg>
+          {(() => {
+            const currentActiveViews = syncedVideo ? syncedVideo.views : (channel?.averageViews ? Math.round(channel.averageViews * 1.18) : 48000);
+            const currentBaselineViews = channel?.averageViews || 41300;
+            const ratio = Math.max(0.00001, currentActiveViews / Math.max(1, currentBaselineViews));
+
+            let startY: number;
+            let endY: number;
+            if (ratio <= 0.05) {
+              startY = 212;
+              endY = 208;
+            } else if (ratio < 0.4) {
+              startY = 208;
+              endY = 200 - (ratio / 0.4) * 30;
+            } else if (ratio < 0.85) {
+              startY = 200;
+              endY = 170 - ((ratio - 0.4) / 0.45) * 35;
+            } else if (ratio < 1.3) {
+              startY = 192;
+              endY = 135 - ((ratio - 0.85) / 0.45) * 35;
+            } else if (ratio < 2.5) {
+              startY = 180;
+              endY = 100 - ((ratio - 1.3) / 1.2) * 50;
+            } else {
+              startY = 170;
+              endY = Math.max(18, 50 - Math.min(32, (ratio - 2.5) * 8));
+            }
+
+            const mid1 = startY - (startY - endY) * 0.32;
+            const mid2 = startY - (startY - endY) * 0.68;
+            const wave = ratio <= 0.05 ? 0.5 : ratio < 0.4 ? 2 : 5;
+            const dynamicActivePath = `M0,${startY.toFixed(0)} C110,${(mid1 + wave).toFixed(0)} 220,${(mid1 - wave).toFixed(0)} 350,${mid1.toFixed(0)} S540,${(mid2 - wave).toFixed(0)} 700,${endY.toFixed(0)}`;
+            const dynamicBaselinePath = `M0,190 C160,180 320,162 480,142 S620,126 700,120`;
+
+            return (
+              <svg viewBox="0 0 700 220" preserveAspectRatio="none" className="absolute inset-0 h-full w-full overflow-visible">
+                <path
+                  d={dynamicActivePath}
+                  fill="none"
+                  stroke="#20243b"
+                  strokeWidth="3"
+                />
+                <path
+                  d={dynamicBaselinePath}
+                  fill="none"
+                  stroke="#f28b67"
+                  strokeDasharray="6 6"
+                  strokeWidth="2"
+                />
+              </svg>
+            );
+          })()}
             {(() => {
               const windowDates = get30DayWindowDates();
               return (
