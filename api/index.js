@@ -695,54 +695,6 @@ export default async function handler(req, res) {
     return;
   }
 
-  if (url.includes("/api/pulse")) {
-    res.status(200).json({
-      creatorName: currentCreatorSettings.name || "Alex Rivera",
-      headline: "Your channel is trending upward.",
-      trend: "+18% vs. last 30 days",
-      growthOpportunities: 7,
-      contentReady: 4,
-      pendingApproval: 2,
-      publishedThisWeek: 5,
-      baselineViews: 41300,
-      recommended: {
-        id: "opp-production-agents",
-        title: "Why AI agents work in a demo but fail in production",
-        topic: "AI agents",
-        format: "Practical tutorial",
-        score: 83,
-        audienceFit: 96,
-        novelty: 88,
-        historicalFit: 94,
-        collisionRisk: 12,
-        effort: "Medium",
-        confidence: "High",
-        rationale: "Your strongest topic has proven demand, but your library has no video that addresses the production failure mode directly.",
-        signals: [
-          "AI-agent videos are 1.9× your baseline",
-          "Low library coverage of production reliability",
-          "Strong fit for a 3-part repurposing package"
-        ],
-        prediction: { direction: "Above creator baseline", confidence: 0.74, baselineMultiplier: 1.8 },
-        status: "recommended",
-        formulaBreakdown: {
-          audienceFitWeight: "35% (Topic avg 812K views / 41.3K channel baseline = 1.96×)",
-          historicalFitWeight: "30% (Practical tutorials average 7.8% engagement across 14 videos)",
-          noveltyWeight: "25% (0 of 42 library videos directly cover production failure modes)",
-          collisionRiskWeight: "-10% (12% token overlap against channel history after stop-word filtering)",
-          formulaString: "Score = (0.35 × 96) + (0.30 × 94) + (0.25 × 88) - (0.10 × 12) = 83",
-          topicBenchmarkRatio: "1.96× baseline views",
-          confidenceRationale: "High confidence: 2 previous topic uploads exceeded 70K views within 7 days"
-        }
-      },
-      recentActivity: [
-        { id: "activity-1", agent: "Channel Brain", action: "Analyzed channel library", detail: "42 videos clustered into 4 topic groups", timestamp: "2 min ago", status: "complete" },
-        { id: "activity-2", agent: "Opportunity Agent", action: "Found a content gap", detail: "Production reliability is under-covered despite strong audience fit", timestamp: "1 min ago", status: "complete" },
-        { id: "activity-3", agent: "Growth Planner", action: "Selected next move", detail: "Why AI agents work in a demo but fail in production", timestamp: "Just now", status: "complete" }
-      ]
-    });
-    return;
-  }
 
   if (url.includes("/api/settings")) {
     if (req.method === "POST" || req.method === "PATCH") {

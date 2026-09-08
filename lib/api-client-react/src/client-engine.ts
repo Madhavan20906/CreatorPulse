@@ -822,23 +822,34 @@ export async function handleClientApi(method: string, path: string, body?: any):
   // Pulse
   if (cleanPath === "/api/pulse" && method === "GET") {
     state.pulse = state.pulse || {};
-    state.pulse.creatorName = state.pulse.creatorName || state.channel?.name || "Creator";
-    state.pulse.headline = state.pulse.headline || "Your channel is trending upward.";
-    state.pulse.baselineViews = state.pulse.baselineViews || state.channel?.averageViews || 41300;
-    state.pulse.growthOpportunities = state.pulse.growthOpportunities || 7;
+    if (state.channel) {
+      state.pulse.creatorName = (typeof window !== "undefined" ? localStorage.getItem("creatorpulse:active_creator_name") : null) || state.channel.name || "Creator";
+      state.pulse.headline = `${state.channel.name} channel pulse: Strong algorithmic momentum.`;
+      state.pulse.baselineViews = state.channel.averageViews || state.pulse.baselineViews || 41300;
+      if (state.opportunities && state.opportunities.length > 0) {
+        state.pulse.recommended =
+          state.opportunities.find((o) => o.status === "recommended") || state.opportunities[0];
+        state.pulse.growthOpportunities = state.opportunities.length;
+      }
+    } else {
+      state.pulse.creatorName = state.pulse.creatorName || "Creator";
+      state.pulse.headline = state.pulse.headline || "Your channel is trending upward.";
+      state.pulse.baselineViews = state.pulse.baselineViews || 41300;
+      state.pulse.growthOpportunities = state.pulse.growthOpportunities || 7;
+      state.pulse.recommended =
+        state.opportunities?.find((o) => o.status === "recommended") ||
+        state.opportunities?.[0] || {
+          id: "opp-production-agents",
+          title: "Why AI agents work in a demo but fail in production",
+          score: 83,
+          rationale: "Your strongest topic has proven demand, but your library has no video directly addressing production reliability.",
+          signals: ["AI-agent videos are 1.9× baseline", "Low library coverage of production reliability"],
+          prediction: { direction: "Above creator baseline", confidence: 0.74, baselineMultiplier: 1.8 },
+          status: "recommended",
+        };
+    }
     state.pulse.contentReady = state.pulse.contentReady || 4;
     state.pulse.publishedThisWeek = state.pulse.publishedThisWeek || 5;
-    state.pulse.recommended =
-      state.opportunities?.find((o) => o.status === "recommended") ||
-      state.opportunities?.[0] || {
-        id: "opp-production-agents",
-        title: "Why AI agents work in a demo but fail in production",
-        score: 83,
-        rationale: "Your strongest topic has proven demand, but your library has no video directly addressing production reliability.",
-        signals: ["AI-agent videos are 1.9× baseline", "Low library coverage of production reliability"],
-        prediction: { direction: "Above creator baseline", confidence: 0.74, baselineMultiplier: 1.8 },
-        status: "recommended",
-      };
     state.pulse.recentActivity = (state.activity || []).slice(0, 4);
     return state.pulse;
   }

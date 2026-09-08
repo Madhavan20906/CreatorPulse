@@ -379,13 +379,18 @@ export function Dashboard() {
   const channelQuery = useGetChannel();
   const memoryQuery = useGetMemory();
   const settingsQuery = useGetSettings();
+  const opportunitiesQuery = useListOpportunities();
   if (pulse.isLoading) return <Shell><LoadingState/></Shell>;
   if (pulse.isError || !pulse.data) return <Shell><ErrorState onRetry={() => pulse.refetch()}/></Shell>;
   const p = pulse.data;
+  const channel = channelQuery.data;
   const storedName = typeof window !== 'undefined' ? localStorage.getItem('creatorpulse:active_creator_name') : null;
   const creatorName = storedName?.trim() || settingsQuery.data?.name?.trim() || p?.creatorName || 'Alex Rivera';
   const creatorFirst = (creatorName.split(/\s+/)[0]) || 'Creator';
-  const rawRec = p?.recommended || {
+  
+  const opps = opportunitiesQuery.data || [];
+  const topOpp = opps.find((o) => o.status === 'recommended') || opps[0];
+  const rawRec = topOpp || p?.recommended || {
     id: 'opp-production-agents',
     title: 'Why AI agents work in a demo but fail in production',
     score: 83,
@@ -398,7 +403,7 @@ export function Dashboard() {
     score: simulatedLoopCycle > 0 ? 87 : (rawRec.score || 83),
   };
 
-  const isLiveMode = (channelQuery.data?.dataMode || '').toLowerCase().includes('live');
+  const isLiveMode = (channel?.dataMode || '').toLowerCase().includes('live');
 
   return (
     <Shell eyebrow="Creator command center" title={`Good morning, ${creatorFirst}`}>
@@ -502,8 +507,13 @@ export function Dashboard() {
           <div>
             <div className="eyebrow">{getWeeklyPulseDate()}</div>
             <h2 className="display mt-2 max-w-2xl text-3xl font-bold leading-tight tracking-[-.04em] md:text-5xl">
-              {p?.headline || 'Your channel is trending upward.'}
+              {channel?.name ? `${channel.name} channel pulse: Strong algorithmic momentum.` : (p?.headline || 'Your channel is trending upward.')}
             </h2>
+            {channel?.handle && (
+              <p className="mt-1.5 text-xs text-muted-foreground">
+                Active channel: <strong className="text-foreground">{channel.name}</strong> ({channel.handle}) · {channel.niche || 'YouTube Creator'} · {channel.dataMode || 'Live Ingest'}
+              </p>
+            )}
           </div>
           <Button href="/opportunities" variant="coral" testId="button-see-opportunities">
             See opportunity map <ArrowUpRight size={15}/>
@@ -515,7 +525,7 @@ export function Dashboard() {
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-border/70 pb-4">
             <div>
               <div className="eyebrow flex items-center gap-1.5 !text-primary">
-                <Clock3 size={13}/> Creator Workflow Economy (Benchmarked Production Timing)
+                <Clock3 size={13}/> Creator Workflow Economy ({channel?.name || 'Channel'} Ingested Pipeline)
               </div>
               <h3 className="display mt-1 text-xl font-bold">
                 8 hrs 15 min saved per production cycle <span className="mono text-xs text-[#72920f] font-normal">(97% reduction · benchmarked manual creator baseline vs. autonomous loop)</span>
@@ -560,17 +570,38 @@ export function Dashboard() {
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          <Stat label="Baseline views" value={money(p?.baselineViews ?? 41300)} change="+12.4%" icon={BarChart3}/>
-          <Stat label="Growth opportunities" value={p?.growthOpportunities ?? 7} change="ranked now" icon={Target}/>
-          <Stat label="Content ready" value={p?.contentReady ?? 4} icon={FileText}/>
-          <Stat label="Published this week" value={p?.publishedThisWeek ?? 5} change="on track" icon={TrendingUp} coral/>
+          <Stat
+            label="Baseline avg views"
+            value={money(channel?.averageViews || p?.baselineViews || 41300)}
+            change={channel?.handle ? `${channel.handle}` : '+12.4%'}
+            icon={BarChart3}
+          />
+          <Stat
+            label="Subscribers"
+            value={channel?.subscribers ? money(channel.subscribers) : '142K'}
+            change="verified channel"
+            icon={Users}
+          />
+          <Stat
+            label="Total views"
+            value={money(channel?.totalViews || ((channel?.averageViews || 41300) * (channel?.videosAnalyzed || 30)))}
+            change="all uploads"
+            icon={TrendingUp}
+            coral
+          />
+          <Stat
+            label="Videos analyzed"
+            value={channel?.videosAnalyzed || (Array.isArray(channel?.videos) ? channel.videos.length : 30)}
+            change="in catalog"
+            icon={Play}
+          />
         </div>
 
         <div className="mt-5 grid gap-5 xl:grid-cols-[1.35fr_.65fr]">
           <div className="panel overflow-hidden">
             <div className="flex items-center justify-between border-b border-border p-6">
               <div>
-                <div className="eyebrow">Recommended next move</div>
+                <div className="eyebrow">Recommended next move · {channel?.name || 'Channel'}</div>
                 <h3 className="display mt-2 text-2xl font-bold">{rec.title}</h3>
               </div>
               <span className={`display text-4xl font-bold ${scoreTone(rec.score)}`}>
@@ -637,13 +668,15 @@ export function Dashboard() {
           <div className="rounded-[18px] bg-[#20243b] p-6 text-[#f2eedf]">
             <div className="flex items-start justify-between">
               <div>
-                <div className="eyebrow !text-[#9da0b0]">The creator brief</div>
+                <div className="eyebrow !text-[#9da0b0]">The creator brief · {channel?.name || 'Creator'}</div>
                 <h3 className="display mt-2 max-w-sm text-2xl font-bold">Clarity compounds faster than content.</h3>
               </div>
               <Sparkles className="text-[#d8f66a]" size={20}/>
             </div>
             <p className="mt-8 max-w-md text-sm leading-6 text-[#b5b5c0]">
-              Your strongest signal is not volume. It’s a repeatable point of view about how independent creators work.
+              {channel?.name
+                ? `Analyzing ${channel.name}'s library shows strong audience resonance around "${channel.topTopic || 'Core Content'}". Focus on high-novelty angles to beat the ${money(channel.averageViews || 41300)} baseline.`
+                : 'Your strongest signal is not volume. It’s a repeatable point of view about how independent creators work.'}
             </p>
             <Link href="/create" className="mt-7 inline-flex items-center gap-2 text-xs font-bold text-[#d8f66a]" data-testid="link-open-content-factory">
               Open content factory <ArrowUpRight size={14}/>
@@ -660,7 +693,22 @@ export function Channel() {
   const queryClient = useQueryClient();
   const [ingestModalOpen, setIngestModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<'youtube' | 'upload'>('youtube');
-  const [channelInput, setChannelInput] = useState('@fireship');
+  const [channelInput, setChannelInput] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('creatorpulse:last_searched_channel_handle');
+      if (saved) return saved;
+    }
+    return q.data?.handle || '@MrBeast';
+  });
+
+  useEffect(() => {
+    if (q.data?.handle) {
+      const saved = typeof window !== 'undefined' ? localStorage.getItem('creatorpulse:last_searched_channel_handle') : null;
+      if (!saved) {
+        setChannelInput(q.data.handle);
+      }
+    }
+  }, [q.data?.handle]);
   const [customName, setCustomName] = useState('');
   const [customNiche, setCustomNiche] = useState('');
   const [customJson, setCustomJson] = useState('');
@@ -689,6 +737,10 @@ export function Channel() {
 
   const handleIngestPreset = async (handle: string) => {
     setIsSubmitting(true);
+    setChannelInput(handle);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('creatorpulse:last_searched_channel_handle', handle);
+    }
     try {
       await customFetch('/api/channel/ingest', {
         method: 'POST',
@@ -832,8 +884,14 @@ export function Channel() {
         <form onSubmit={(e) => { e.preventDefault(); handleIngestPreset(channelInput); }} className="mt-4 flex flex-col sm:flex-row gap-2">
           <input
             value={channelInput}
-            onChange={(e) => setChannelInput(e.target.value)}
-            placeholder="Paste public YouTube handle or URL (e.g. @mkbhd, @veritasium, @fireship)"
+            onChange={(e) => {
+              const val = e.target.value;
+              setChannelInput(val);
+              if (typeof window !== 'undefined') {
+                localStorage.setItem('creatorpulse:last_searched_channel_handle', val);
+              }
+            }}
+            placeholder="Paste public YouTube handle or URL (e.g. @MrBeast, @mkbhd, @veritasium)"
             className="flex-1 rounded-xl border border-[#3c415e] bg-[#0c0f1c] px-4 py-2.5 text-xs text-white outline-none focus:border-[#d8f66a]"
             data-testid="input-quick-channel-ingest"
           />
@@ -853,7 +911,13 @@ export function Channel() {
             <button
               key={h}
               type="button"
-              onClick={() => { setChannelInput(h); handleIngestPreset(h); }}
+              onClick={() => {
+                setChannelInput(h);
+                if (typeof window !== 'undefined') {
+                  localStorage.setItem('creatorpulse:last_searched_channel_handle', h);
+                }
+                handleIngestPreset(h);
+              }}
               className="rounded-lg border border-[#3c415e] bg-[#20243b] px-2.5 py-1 text-[11px] font-bold text-[#d8f66a] hover:bg-[#2e3454]"
             >
               {h}
@@ -862,7 +926,13 @@ export function Channel() {
           {!isDemoCatalog && (
             <button
               type="button"
-              onClick={handleResetToDemo}
+              onClick={() => {
+                if (typeof window !== 'undefined') {
+                  localStorage.removeItem('creatorpulse:last_searched_channel_handle');
+                }
+                setChannelInput('@fireship');
+                handleResetToDemo();
+              }}
               className="rounded-lg border border-red-500/40 bg-red-500/10 px-2.5 py-1 text-[11px] font-bold text-red-400 hover:bg-red-500/20 ml-auto"
             >
               Reset to 42-Video Seeded Demo
@@ -1078,14 +1148,21 @@ export function Channel() {
                   </label>
                   <div className="mt-2 flex flex-wrap gap-2">
                     {[
-                      { handle: '@fireship', label: '@fireship (3.4M subs · Web Dev & AI)' },
-                      { handle: '@mkbhd', label: '@mkbhd (19.4M subs · Tech & Hardware)' },
-                      { handle: '@veritasium', label: '@veritasium (16.9M subs · Science & Physics)' },
+                      { handle: '@MrBeast', label: '@MrBeast (516M subs · Viral Entertainment)' },
+                      { handle: '@fireship', label: '@fireship (4.3M subs · Web Dev & AI)' },
+                      { handle: '@mkbhd', label: '@mkbhd (21.2M subs · Tech & Hardware)' },
+                      { handle: '@veritasium', label: '@veritasium (21.2M subs · Science & Physics)' },
                     ].map((p) => (
                       <button
                         key={p.handle}
                         type="button"
-                        onClick={() => handleIngestPreset(p.handle)}
+                        onClick={() => {
+                          setChannelInput(p.handle);
+                          if (typeof window !== 'undefined') {
+                            localStorage.setItem('creatorpulse:last_searched_channel_handle', p.handle);
+                          }
+                          handleIngestPreset(p.handle);
+                        }}
                         disabled={isSubmitting}
                         className="rounded-xl border border-[#b8d954]/50 bg-[#edf3c9]/50 px-2.5 py-1.5 mono text-[11px] font-semibold text-[#39450e] hover:bg-[#edf3c9] transition-colors"
                       >
@@ -1101,8 +1178,14 @@ export function Channel() {
                   </label>
                   <input
                     value={channelInput}
-                    onChange={(e) => setChannelInput(e.target.value)}
-                    placeholder="e.g. @fireship, @mkbhd, https://youtube.com/@veritasium"
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setChannelInput(val);
+                      if (typeof window !== 'undefined') {
+                        localStorage.setItem('creatorpulse:last_searched_channel_handle', val);
+                      }
+                    }}
+                    placeholder="e.g. @MrBeast, @mkbhd, https://youtube.com/@veritasium"
                     className="mt-1.5 w-full rounded-xl border border-input bg-background px-3.5 py-2.5 text-sm outline-none focus:border-primary"
                     data-testid="input-youtube-handle"
                   />
