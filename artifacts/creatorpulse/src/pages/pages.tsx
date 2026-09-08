@@ -157,14 +157,25 @@ export function Onboarding() {
   const settings = useGetSettings();
   const updateSettings = useUpdateSettings();
   const queryClient = useQueryClient();
-  const [name, setName] = useState('Alex Rivera');
+  const [name, setName] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('creatorpulse:active_creator_name');
+      if (saved) return saved;
+    }
+    return '';
+  });
   const [niche, setNiche] = useState('AI engineering and developer tools');
 
   const [channelHandle, setChannelHandle] = useState('@fireship');
   const [isLaunching, setIsLaunching] = useState(false);
 
   useEffect(() => {
-    if (settings.data?.name) setName(settings.data.name);
+    const saved = typeof window !== 'undefined' ? localStorage.getItem('creatorpulse:active_creator_name') : null;
+    if (saved) {
+      setName(saved);
+    } else if (settings.data?.name && !name) {
+      setName(settings.data.name);
+    }
     if (settings.data?.niche) setNiche(settings.data.niche);
   }, [settings.data]);
 
@@ -182,6 +193,9 @@ export function Onboarding() {
 
   const handleLaunch = async () => {
     setIsLaunching(true);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('creatorpulse:active_creator_name', cleanName);
+    }
     try {
       if (channelHandle.trim()) {
         try {
@@ -368,7 +382,8 @@ export function Dashboard() {
   if (pulse.isLoading) return <Shell><LoadingState/></Shell>;
   if (pulse.isError || !pulse.data) return <Shell><ErrorState onRetry={() => pulse.refetch()}/></Shell>;
   const p = pulse.data;
-  const creatorName = settingsQuery.data?.name?.trim() || p?.creatorName || 'Alex Rivera';
+  const storedName = typeof window !== 'undefined' ? localStorage.getItem('creatorpulse:active_creator_name') : null;
+  const creatorName = storedName?.trim() || settingsQuery.data?.name?.trim() || p?.creatorName || 'Alex Rivera';
   const creatorFirst = (creatorName.split(/\s+/)[0]) || 'Creator';
   const rawRec = p?.recommended || {
     id: 'opp-production-agents',
@@ -2288,6 +2303,14 @@ export function Analytics() {
   const channelDisplayName = channel?.name || settingsQuery.data?.name || 'Active channel';
   const [liveVideoUrl, setLiveVideoUrl] = useState('');
   const [isSyncingLive, setIsSyncingLive] = useState(false);
+  const [syncedVideo, setSyncedVideo] = useState<{
+    id: string;
+    title: string;
+    views: number;
+    likes: number;
+    comments?: number;
+    url?: string;
+  } | null>(null);
   const [result, setResult] = useState<{
     baselineViews: number;
     actualViews: number;
@@ -2319,6 +2342,14 @@ export function Analytics() {
 
   const selectRealVideo = (v: any) => {
     setActivePreset(v.id);
+    setSyncedVideo({
+      id: v.id,
+      title: v.title,
+      views: Number(v.views) || 50000,
+      likes: Math.round((v.views || 50000) * 0.05),
+      comments: Math.round((v.views || 50000) * 0.006),
+      url: v.id.startsWith('http') ? v.id : `https://www.youtube.com/watch?v=${v.id}`,
+    });
     setForm({
       contentId: v.id,
       views: String(v.views || 50000),
@@ -2337,15 +2368,24 @@ export function Analytics() {
     setIsSyncingLive(true);
     try {
       const res: any = await customFetch(`/api/measure/live-sync?videoIdOrUrl=${encodeURIComponent(target)}`);
+      const newSynced = {
+        id: res.videoId,
+        title: res.title || 'YouTube Video',
+        views: Number(res.views) || 50000,
+        likes: Number(res.likes) || Math.round((res.views || 50000) * 0.04),
+        comments: Math.round((res.views || 50000) * 0.005),
+        url: res.url || `https://www.youtube.com/watch?v=${res.videoId}`,
+      };
+      setSyncedVideo(newSynced);
       setForm({
-        contentId: res.videoId,
-        views: String(res.views),
-        likes: String(res.likes || Math.round(res.views * 0.04)),
-        comments: String(Math.round(res.views * 0.005)),
-        subscribersGained: String(Math.round(res.views * 0.002)),
+        contentId: newSynced.id,
+        views: String(newSynced.views),
+        likes: String(newSynced.likes),
+        comments: String(newSynced.comments),
+        subscribersGained: String(Math.round(newSynced.views * 0.002)),
       });
-      setActivePreset('live-sync');
-      toast.success(`Synced live metrics for "${res.title}": ${res.views.toLocaleString()} views!`);
+      setActivePreset(newSynced.id);
+      toast.success(`Synced live metrics for "${newSynced.title}": ${newSynced.views.toLocaleString()} views!`);
     } catch (e: any) {
       toast.error('Failed to sync live metrics: ' + (e.message || 'Unknown error'));
     } finally {
@@ -2419,6 +2459,57 @@ export function Analytics() {
           </button>
         </div>
 
+        {/* Active Synced YouTube Video Card */}
+        {syncedVideo && (
+          <div className="mt-4 rounded-xl border-2 border-primary bg-primary/10 p-4 shadow-sm animate-enter" data-testid="active-synced-video-card">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-primary/20 pb-2.5">
+              <div className="flex items-center gap-2">
+                <span className="relative flex h-2.5 w-2.5">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-primary"></span>
+                </span>
+                <span className="mono text-[11px] font-bold text-primary uppercase tracking-wider">
+                  Live Synced From YouTube
+                </span>
+              </div>
+              <a
+                href={syncedVideo.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 mono text-[11px] font-bold text-primary hover:underline"
+              >
+                Watch on YouTube <ExternalLink size={12} />
+              </a>
+            </div>
+            <div className="mt-3">
+              <h4 className="text-base font-bold text-foreground leading-snug">{syncedVideo.title}</h4>
+              <div className="mono mt-1 text-[11px] text-muted-foreground">
+                Video ID: <span className="text-foreground font-semibold">{syncedVideo.id}</span>
+              </div>
+            </div>
+            <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+              <div className="rounded-lg bg-background/90 p-2.5 border border-primary/20">
+                <div className="text-[10px] text-muted-foreground font-semibold uppercase">Live Views</div>
+                <div className="mt-1 text-lg font-bold text-foreground">{syncedVideo.views.toLocaleString()}</div>
+              </div>
+              <div className="rounded-lg bg-background/90 p-2.5 border border-primary/20">
+                <div className="text-[10px] text-muted-foreground font-semibold uppercase">Live Likes</div>
+                <div className="mt-1 text-lg font-bold text-foreground">{syncedVideo.likes.toLocaleString()}</div>
+              </div>
+              <div className="rounded-lg bg-background/90 p-2.5 border border-primary/20">
+                <div className="text-[10px] text-muted-foreground font-semibold uppercase">Est. Comments</div>
+                <div className="mt-1 text-lg font-bold text-foreground">{(syncedVideo.comments || 0).toLocaleString()}</div>
+              </div>
+              <div className="rounded-lg bg-background/90 p-2.5 border border-primary/20">
+                <div className="text-[10px] text-muted-foreground font-semibold uppercase">vs Channel Baseline</div>
+                <div className="mt-1 text-lg font-bold text-primary">
+                  {(syncedVideo.views / (channel?.averageViews || 41300)).toFixed(1)}×
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Real Ingested Videos Grid */}
         {realVideos.length > 0 && (
           <div className="mt-4">
@@ -2442,7 +2533,18 @@ export function Analytics() {
                     </span>
                   </div>
                   <div className="mt-1 font-bold text-foreground text-xs line-clamp-1">{v.title}</div>
-                  <div className="mt-1 text-[10px] text-muted-foreground">Published: {v.publishedAt} · Format: {v.format}</div>
+                  <div className="mt-1 flex items-center justify-between text-[10px] text-muted-foreground">
+                    <span>Published: {v.publishedAt} · Format: {v.format}</span>
+                    <a
+                      href={v.id.startsWith('http') ? v.id : `https://www.youtube.com/watch?v=${v.id}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      className="mono font-bold text-primary hover:underline ml-2"
+                    >
+                      Watch ↗
+                    </a>
+                  </div>
                 </button>
               ))}
             </div>
@@ -2456,9 +2558,15 @@ export function Analytics() {
           <div className="mt-2 flex items-end justify-between">
             <div>
               <h3 className="display text-2xl font-bold">Views vs baseline</h3>
-              <p className="mt-1 text-sm text-muted-foreground">Last 30 days / {channelDisplayName} channel</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {syncedVideo ? `Active upload: "${syncedVideo.title}"` : `Last 30 days / ${channelDisplayName} channel`}
+              </p>
             </div>
-            <span className="mono rounded-lg bg-[#edf3c9] px-2 py-1 text-[10px] text-[#72920f]">+18.6%</span>
+            <span className="mono rounded-lg bg-[#edf3c9] px-2 py-1 text-[10px] text-[#72920f]">
+              {syncedVideo
+                ? `${(syncedVideo.views / (channel?.averageViews || 41300)).toFixed(1)}× baseline (${syncedVideo.views.toLocaleString()} views)`
+                : '+18.6%'}
+            </span>
           </div>
           <div className="relative mt-8 h-56 border-b border-l border-border">
             <div className="absolute inset-x-0 top-1/4 border-t border-dashed border-border" />
@@ -2492,11 +2600,11 @@ export function Analytics() {
           <div className="mt-10 flex gap-5 mono text-[9px] text-muted-foreground">
             <span>
               <i className="mr-2 inline-block h-2 w-2 rounded-full bg-primary" />
-              Actual
+              {syncedVideo ? `Active: ${syncedVideo.views.toLocaleString()} views` : 'Actual'}
             </span>
             <span>
               <i className="mr-2 inline-block h-2 w-2 rounded-full bg-[#f28b67]" />
-              Baseline
+              Baseline ({(channel?.averageViews || 41300).toLocaleString()} views)
             </span>
           </div>
         </div>
@@ -2769,9 +2877,10 @@ export function ActivityPage() {
 export function SettingsPage() {
   const settings = useGetSettings();
   const updateSettings = useUpdateSettings();
+  const storedName = typeof window !== 'undefined' ? localStorage.getItem('creatorpulse:active_creator_name') : null;
   const [demo, setDemo] = useState(true);
   const [form, setForm] = useState({
-    name: 'Alex Rivera',
+    name: storedName || 'Alex Rivera',
     niche: 'AI engineering and developer tools',
     audience: '18–34 year-old developers building with AI',
     tone: 'Practical, candid, technically rigorous',
@@ -2781,8 +2890,9 @@ export function SettingsPage() {
 
   useEffect(() => {
     if (settings.data) {
+      const activeName = (typeof window !== 'undefined' ? localStorage.getItem('creatorpulse:active_creator_name') : null) || settings.data.name || 'Alex Rivera';
       setForm({
-        name: settings.data.name || 'Alex Rivera',
+        name: activeName,
         niche: settings.data.niche || 'AI engineering and developer tools',
         audience: settings.data.audience || '18–34 year-old developers building with AI',
         tone: settings.data.tone || 'Practical, candid, technically rigorous',
@@ -2795,6 +2905,9 @@ export function SettingsPage() {
   const queryClient = useQueryClient();
 
   const handleSave = () => {
+    if (typeof window !== 'undefined' && form.name?.trim()) {
+      localStorage.setItem('creatorpulse:active_creator_name', form.name.trim());
+    }
     updateSettings.mutate(
       { data: form },
       {
@@ -2931,16 +3044,31 @@ export function BeforePublish() {
   const [result, setResult] = useState<ReturnType<typeof useEvaluateIdea>['data']>(undefined);
 
   useEffect(() => {
+    let initialIdea = idea;
     if (typeof window !== 'undefined') {
       const urlParams = new URLSearchParams(window.location.search);
       const q = urlParams.get('idea');
-      if (q && q !== idea) {
-        setIdea(decodeURIComponent(q));
+      if (q) {
+        initialIdea = decodeURIComponent(q);
+        setIdea(initialIdea);
       }
+    }
+    if (initialIdea && initialIdea.trim()) {
+      evaluate.mutate({ data: { idea: initialIdea.trim() } }, { onSuccess: setResult });
     }
   }, []);
 
-  const submit = (e: FormEvent) => { e.preventDefault(); evaluate.mutate({ data: { idea } }, { onSuccess: setResult }); };
+  const submit = (e: FormEvent) => {
+    e.preventDefault();
+    if (!idea.trim()) return;
+    evaluate.mutate({ data: { idea: idea.trim() } }, { onSuccess: setResult });
+  };
+
+  const handleRunPreset = (text: string) => {
+    setIdea(text);
+    evaluate.mutate({ data: { idea: text } }, { onSuccess: setResult });
+  };
+
   return (
     <Shell eyebrow="Decision support" title="Before I publish">
       <div className="grid gap-8 lg:grid-cols-[.8fr_1.2fr] lg:items-start">
@@ -2957,13 +3085,33 @@ export function BeforePublish() {
             <textarea
               value={idea}
               onChange={(e) => setIdea(e.target.value)}
-              rows={6}
+              rows={5}
               className="mt-2 w-full resize-none rounded-2xl border border-input bg-card p-4 text-sm leading-6 outline-none focus:border-primary"
               data-testid="input-evaluate-idea"
             />
-            <Button disabled={!idea.trim() || evaluate.isPending} variant="coral" testId="button-evaluate-idea">
-              {evaluate.isPending ? 'Calculating embeddings…' : 'Evaluate this idea'} <Sparkles size={14}/>
-            </Button>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <span className="mono text-[10px] text-muted-foreground py-1">Quick Presets:</span>
+              {[
+                { label: '🚀 Novel Voice Agent', text: 'Building an Autonomous Voice AI Coding Agent with WebRTC and Rust' },
+                { label: '⚠️ Catalog Duplicate', text: 'I built an AI agent that fixes its own bugs' },
+                { label: '⚙️ Production Failures', text: 'Why RAG Pipelines Fail in Production and How to Fix Them' },
+                { label: '❓ Off-Niche Topic', text: 'Top 10 Sourdough Bread Baking Tips for Beginners' },
+              ].map((p) => (
+                <button
+                  key={p.label}
+                  type="button"
+                  onClick={() => handleRunPreset(p.text)}
+                  className="rounded-lg border border-border bg-secondary/50 px-2.5 py-1 text-[10px] font-semibold hover:border-primary hover:bg-primary/10 transition-colors"
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
+            <div className="mt-4">
+              <Button disabled={!idea.trim() || evaluate.isPending} variant="coral" testId="button-evaluate-idea">
+                {evaluate.isPending ? 'Calculating embeddings…' : 'Evaluate this idea'} <Sparkles size={14}/>
+              </Button>
+            </div>
           </form>
         </div>
 

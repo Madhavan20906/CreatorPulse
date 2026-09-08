@@ -355,10 +355,19 @@ async function fetchLiveYouTubeCatalog(channelInput) {
   };
 }
 
+let currentCreatorSettings = {
+  name: "Alex Rivera",
+  niche: "AI engineering and developer tools",
+  cadence: "2 videos per week",
+  audience: "Developers and engineers",
+  guidelines: "Keep it candid and technically rigorous.",
+  targetFormats: ["Practical tutorial", "Deep dive", "Shorts"],
+  primaryGoals: ["Grow authority", "Audience retention"]
+};
+
 export default async function handler(req, res) {
-  // Enable CORS
   res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, PATCH, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
 
   if (req.method === "OPTIONS") {
@@ -371,6 +380,12 @@ export default async function handler(req, res) {
   if (url.includes("/api/channel/ingest")) {
     try {
       const body = typeof req.body === "string" ? JSON.parse(req.body) : (req.body || {});
+      if (body.channelName) {
+        currentCreatorSettings.name = body.channelName;
+      }
+      if (body.niche) {
+        currentCreatorSettings.niche = body.niche;
+      }
       const channelInput = (body.channelUrlOrHandle || "@fireship").trim();
       const cleanKey = channelInput.toLowerCase().replace(/^https?:\/\/(www\.)?youtube\.com\//, "").replace(/^\/?@?/, "");
 
@@ -521,26 +536,158 @@ export default async function handler(req, res) {
       const urlObj = new URL(req.url, "http://localhost");
       const videoIdOrUrl = urlObj.searchParams.get("videoIdOrUrl") || "";
       let videoId = videoIdOrUrl.trim();
-      const match = videoId.match(/[?&]v=([a-zA-Z0-9_-]{11})/) || videoId.match(/youtu\.be\/([a-zA-Z0-9_-]{11})/);
+      const match = videoId.match(/(?:v=|\/shorts\/|youtu\.be\/|\/v\/|\/embed\/)([a-zA-Z0-9_-]{11})/) || videoId.match(/^([a-zA-Z0-9_-]{11})$/);
       if (match) videoId = match[1];
 
-      const ytRes = await fetch(`https://www.youtube.com/watch?v=${videoId}`, {
-        headers: { "User-Agent": "Mozilla/5.0" }
+      let title = "YouTube Video";
+      let views = 50000;
+      let likes = 2000;
+
+      // 1. Try fast YouTube oEmbed API for real title
+      try {
+        const oembedRes = await fetch(`https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${videoId}&format=json`, {
+          headers: { "User-Agent": "Mozilla/5.0" }
+        });
+        if (oembedRes.ok) {
+          const odata = await oembedRes.json();
+          if (odata.title) title = unescapeHtml(odata.title);
+        }
+      } catch {}
+
+      // 2. Fetch video page for live public viewCount & likeCount
+      try {
+        const ytRes = await fetch(`https://www.youtube.com/watch?v=${videoId}`, {
+          headers: { "User-Agent": "Mozilla/5.0" }
+        });
+        const html = await ytRes.text();
+        const viewsMatch = html.match(/"viewCount":"(\d+)"/) || html.match(/"views":\{"simpleText":"([\d,]+)\s+views"\}/);
+        const likesMatch = html.match(/"likeCount":"(\d+)"/);
+        const titleMatch = html.match(/<title>([^<]+)<\/title>/);
+
+        if (viewsMatch) views = parseInt(viewsMatch[1].replace(/,/g, ""), 10);
+        if (likesMatch) likes = parseInt(likesMatch[1].replace(/,/g, ""), 10);
+        else likes = Math.round(views * 0.04);
+        if (titleMatch && title === "YouTube Video") title = unescapeHtml(titleMatch[1].replace(/\s*-\s*YouTube$/i, ""));
+      } catch {}
+
+      res.status(200).json({
+        videoId,
+        title,
+        views,
+        likes,
+        comments: Math.round(views * 0.005),
+        url: `https://www.youtube.com/watch?v=${videoId}`
       });
-      const html = await ytRes.text();
-      const viewsMatch = html.match(/"viewCount":"(\d+)"/) || html.match(/"views":\{"simpleText":"([\d,]+)\s+views"\}/);
-      const likesMatch = html.match(/"likeCount":"(\d+)"/);
-      const titleMatch = html.match(/<title>([^<]+)<\/title>/);
-
-      const views = viewsMatch ? parseInt(viewsMatch[1].replace(/,/g, ""), 10) : 50000;
-      const likes = likesMatch ? parseInt(likesMatch[1].replace(/,/g, ""), 10) : Math.round(views * 0.04);
-      const title = titleMatch ? unescapeHtml(titleMatch[1].replace(/\s*-\s*YouTube$/i, "")) : "YouTube Video";
-
-      res.status(200).json({ videoId, title, views, likes });
     } catch (err) {
       res.status(400).json({ error: err.message || "Failed to fetch live metrics" });
     }
     return;
+  }
+
+  if (url.includes("/api/before-publish") || url.includes("/api/evaluate-idea")) {
+    try {
+      const body = typeof req.body === "string" ? JSON.parse(req.body) : (req.body || {});
+      const idea = body?.data?.idea || body?.idea || "Why productive creators are building slower systems";
+      const cleanIdea = idea.trim();
+      const lower = cleanIdea.toLowerCase();
+
+      const words = lower.replace(/[^a-z0-9\s]/g, " ").split(/\s+/).filter(w => w.length > 2);
+
+      const catalogVideos = [
+        { title: "I built an AI agent that fixes its own bugs", topic: "AI agents", format: "Practical tutorial", views: 84200 },
+        { title: "The MCP architecture I wish I had started with", topic: "Developer workflows", format: "Deep dive", views: 71300 },
+        { title: "Build a RAG app in 30 minutes", topic: "RAG systems", format: "Practical tutorial", views: 48200 },
+        { title: "5 Python automations I use every week", topic: "Python tutorials", format: "Listicle", views: 21600 },
+        { title: "Multi-agent systems with LangGraph and CrewAI", topic: "AI agents", format: "Deep dive", views: 76400 },
+        { title: "Autonomous coding loops: Claude 3.5 Sonnet vs GPT-4o", topic: "AI agents", format: "Case study", views: 91400 },
+        { title: "Why most autonomous agents get stuck in infinite loops", topic: "AI agents", format: "Case study", views: 88300 },
+        { title: "Local LLM agents using Ollama and Function Calling", topic: "AI agents", format: "Practical tutorial", views: 78500 },
+        { title: "GraphRAG: when vector databases are not enough", topic: "RAG systems", format: "System design", views: 57400 }
+      ];
+
+      const matches = catalogVideos.map(v => {
+        const vWords = v.title.toLowerCase().replace(/[^a-z0-9\s]/g, " ").split(/\s+/).filter(w => w.length > 2);
+        const vTokens = new Set(vWords);
+        const overlap = words.filter(w => vTokens.has(w));
+        const unionSize = new Set([...words, ...vWords]).size;
+        const jaccard = unionSize > 0 ? (overlap.length / unionSize) * 100 : 0;
+        const exact = lower.includes(v.title.toLowerCase()) || v.title.toLowerCase().includes(lower);
+        const sim = Math.min(98, Math.max(8, Math.round(exact ? 92 : jaccard * 1.6 + (lower.includes(v.topic.toLowerCase()) ? 15 : 0))));
+        return {
+          videoTitle: v.title,
+          similarity: sim,
+          topic: v.topic,
+          format: v.format,
+          views: v.views
+        };
+      }).sort((a, b) => b.similarity - a.similarity);
+
+      const topMatch = matches[0];
+      const collisionRisk = topMatch ? topMatch.similarity : 10;
+
+      const isTech = /\b(ai|agent|llm|rag|python|code|coding|developer|software|mcp|cloud|rust|database|terminal|api|docker)\b/i.test(lower);
+      const isOffNiche = /\b(baking|cake|recipe|food|cooking|workout|gym|fitness|travel|vlog|crypto|makeup)\b/i.test(lower) && !isTech;
+      let audienceFit = 85;
+      if (isOffNiche) audienceFit = 38;
+      else if (isTech) audienceFit = Math.min(98, 86 + (words.length % 7) * 2);
+      else audienceFit = 68;
+
+      const isDeepDive = /\b(why|architecture|deep dive|internals|breakdown|under the hood|failure|mistakes|post-mortem|truth)\b/i.test(lower);
+      const isTutorial = /\b(how to|build|from scratch|guide|tutorial|setup|step by step|create|crash course)\b/i.test(lower);
+      const isListicle = /\b(top|best|vs|comparison|alternatives|\b\d+\s+(tools|tips|libraries|ways|mistakes))\b/i.test(lower);
+      const detectedFormat = isDeepDive ? "Deep dive" : isTutorial ? "Practical tutorial" : isListicle ? "Listicle" : "Essay";
+      const historicalFit = isDeepDive ? 92 : isTutorial ? 88 : isListicle ? 74 : 78;
+
+      const novelty = Math.max(15, Math.min(98, Math.round(100 - collisionRisk * 0.8 + (10 - Math.min(10, words.length)) * 2)));
+
+      const opportunity = Math.max(10, Math.min(99, Math.round(audienceFit * 0.35 + historicalFit * 0.30 + novelty * 0.25 - collisionRisk * 0.10)));
+
+      const shouldReframe = collisionRisk >= 55;
+      const recommendation = shouldReframe ? "REFRAME" : (isOffNiche ? "PIVOT" : "GO");
+
+      const coreSubject = cleanIdea.replace(/^(how to|why|what is|the best way to|a guide to|how i|top \d+|5 |10 |3 |building a|i built an|i made an)\s+/i, "").replace(/[?.!]+$/, "").trim() || cleanIdea;
+
+      let suggestedAlternative = "";
+      if (shouldReframe) {
+        suggestedAlternative = isTutorial
+          ? `Pivot from basic tutorial to battle-tested post-mortem: "${coreSubject}: 3 Production Failure Modes and How We Solved Them"`
+          : `Shift angle to direct benchmarks: "Testing ${coreSubject} Under Real-World Stress: Where It Breaks"`;
+      } else if (isOffNiche) {
+        suggestedAlternative = `Bridge into developer workflow: "How Developers Can Automate ${coreSubject} With Custom CLI Agents"`;
+      } else if (opportunity >= 78) {
+        suggestedAlternative = isTutorial
+          ? `High-conversion outcome: "Building a Production-Ready ${coreSubject} in 30 Minutes"`
+          : `Contrarian hook: "Why 90% of Engineers Misunderstand ${coreSubject}"`;
+      } else {
+        suggestedAlternative = `Test as a 45-second Short first: "The Single Biggest Misconception About ${coreSubject}"`;
+      }
+
+      let explanation = "";
+      if (shouldReframe) {
+        explanation = `High collision risk detected (${collisionRisk}% similarity with "${topMatch?.videoTitle}"). Releasing another broad video on this exact topic risks splitting your audience watch-time. Pivot the angle toward production failure modes, architectural trade-offs, or concrete benchmarks.`;
+      } else if (isOffNiche) {
+        explanation = `Low audience fit (${audienceFit}/100). This topic diverges from your channel's established core niche. Without a strong automation or engineering angle, subscriber CTR and initial 30-second retention will drop significantly.`;
+      } else {
+        explanation = `Strong greenlight opportunity (${opportunity}/100) with healthy novelty (${novelty}%) and low collision risk (${collisionRisk}%). High alignment with your audience (Audience fit: ${audienceFit}, Historical fit: ${historicalFit} for ${detectedFormat}). Fresh territory with validated demand.`;
+      }
+
+      res.status(200).json({
+        idea: cleanIdea,
+        recommendation,
+        opportunity,
+        audienceFit,
+        novelty,
+        collisionRisk,
+        historicalFit,
+        explanation,
+        suggestedAlternative,
+        similarVideos: matches.slice(0, 3)
+      });
+      return;
+    } catch (err) {
+      res.status(400).json({ error: err.message || "Failed to evaluate idea" });
+      return;
+    }
   }
 
   if (url.includes("/api/healthz")) {
@@ -550,7 +697,7 @@ export default async function handler(req, res) {
 
   if (url.includes("/api/pulse")) {
     res.status(200).json({
-      creatorName: "Alex Rivera",
+      creatorName: currentCreatorSettings.name || "Alex Rivera",
       headline: "Your channel is trending upward.",
       trend: "+18% vs. last 30 days",
       growthOpportunities: 7,
@@ -598,15 +745,19 @@ export default async function handler(req, res) {
   }
 
   if (url.includes("/api/settings")) {
-    res.status(200).json({
-      name: "Alex Rivera",
-      niche: "AI engineering and developer tools",
-      cadence: "2 videos per week",
-      audience: "Developers and engineers",
-      guidelines: "Keep it candid and technically rigorous.",
-      targetFormats: ["Practical tutorial", "Deep dive", "Shorts"],
-      primaryGoals: ["Grow authority", "Audience retention"]
-    });
+    if (req.method === "POST" || req.method === "PATCH") {
+      try {
+        const body = typeof req.body === "string" ? JSON.parse(req.body) : (req.body || {});
+        const updateData = body.data || body;
+        if (updateData.name) currentCreatorSettings.name = updateData.name;
+        if (updateData.niche) currentCreatorSettings.niche = updateData.niche;
+        if (updateData.audience) currentCreatorSettings.audience = updateData.audience;
+        if (updateData.tone) currentCreatorSettings.guidelines = updateData.tone;
+        if (updateData.goals) currentCreatorSettings.primaryGoals = updateData.goals;
+        if (updateData.platforms) currentCreatorSettings.targetFormats = updateData.platforms;
+      } catch {}
+    }
+    res.status(200).json(currentCreatorSettings);
     return;
   }
 

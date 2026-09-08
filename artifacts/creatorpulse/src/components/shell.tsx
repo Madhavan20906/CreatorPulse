@@ -115,7 +115,8 @@ export function Shell({
   const opportunitiesQuery = useListOpportunities();
   const channelQuery = useGetChannel();
 
-  const creatorName = settingsQuery.data?.name?.trim() || channelQuery.data?.name?.trim() || 'Alex Rivera';
+  const storedName = typeof window !== 'undefined' ? localStorage.getItem('creatorpulse:active_creator_name') : null;
+  const creatorName = storedName?.trim() || settingsQuery.data?.name?.trim() || channelQuery.data?.name?.trim() || 'Alex Rivera';
   const initials =
     creatorName
       .split(/\s+/)
@@ -147,6 +148,7 @@ export function Shell({
       localStorage.removeItem('creatorpulse:lastContentId');
       localStorage.removeItem('creatorpulse:read_notifications');
       localStorage.removeItem('creatorpulse:customChannel');
+      localStorage.removeItem('creatorpulse:active_creator_name');
     } catch {}
     toast.success('Signed out. Redirecting to channel onboarding...');
     queryClient.clear();

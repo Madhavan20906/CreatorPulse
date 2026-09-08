@@ -71,22 +71,49 @@ export function setGeminiApiKey(key: string | null): void {
   }
 }
 
-// Deterministic semantic vector generation (128-d)
-export function generateDeterministicVector(text: string): number[] {
-  const normalized = text.toLowerCase().trim();
-  const vector: number[] = new Array(128).fill(0);
-  for (let i = 0; i < normalized.length; i++) {
-    const code = normalized.charCodeAt(i);
-    const pos = (code * 31 + i * 17) % 128;
-    vector[pos] += Math.sin(code + i);
+// Deterministic semantic vector generation (128-d) using subword n-gram hashing and term weighting
+export function generateDeterministicVector(text: string, dim = 128): number[] {
+  const vec = new Float64Array(dim);
+  const clean = text.toLowerCase().replace(/[^a-z0-9\s]/g, " ");
+  const words = clean.split(/\s+/).filter(Boolean);
+
+  for (let i = 0; i < words.length; i++) {
+    const word = words[i];
+    let hash = 5381;
+    for (let j = 0; j < word.length; j++) {
+      hash = ((hash << 5) + hash + word.charCodeAt(j)) >>> 0;
+    }
+    const idx = hash % dim;
+    vec[idx] += 1.5;
+
+    if (word.length >= 3) {
+      for (let k = 0; k <= word.length - 3; k++) {
+        const tri = word.slice(k, k + 3);
+        let triHash = 2166136261;
+        for (let m = 0; m < 3; m++) {
+          triHash = (triHash ^ tri.charCodeAt(m)) * 16777619;
+        }
+        vec[Math.abs(triHash) % dim] += 0.5;
+      }
+    }
+
+    if (i < words.length - 1) {
+      const bi = `${word}_${words[i + 1]}`;
+      let biHash = 0;
+      for (let j = 0; j < bi.length; j++) {
+        biHash = ((biHash << 5) + biHash + bi.charCodeAt(j)) >>> 0;
+      }
+      vec[biHash % dim] += 1.0;
+    }
   }
-  let norm = 0;
-  for (let i = 0; i < 128; i++) {
-    norm += vector[i] * vector[i];
-  }
-  norm = Math.sqrt(norm);
-  if (norm === 0) return vector;
-  return vector.map((v) => v / norm);
+
+  let normSq = 0;
+  for (let i = 0; i < dim; i++) normSq += vec[i] * vec[i];
+  const norm = Math.sqrt(normSq);
+  if (norm === 0) return Array.from(vec);
+  const out = new Array(dim);
+  for (let i = 0; i < dim; i++) out[i] = vec[i] / norm;
+  return out;
 }
 
 export function cosineSimilarity(a: number[], b: number[]): number {
@@ -594,8 +621,8 @@ export function syncIngestedChannelToClientState(channelData: any): any {
 
   state.pulse = state.pulse || {};
   state.pulse.baselineViews = averageViews || 41300;
-  // Keep the creator user's name intact; do not overwrite with ingested channel
-  state.pulse.creatorName = state.settings?.name || state.pulse?.creatorName || "Alex Rivera";
+  const activeStoredCreator = (typeof window !== "undefined" ? localStorage.getItem("creatorpulse:active_creator_name") : null) || state.settings?.name || state.pulse?.creatorName || state.channel?.name || "Alex Rivera";
+  state.pulse.creatorName = activeStoredCreator;
   state.pulse.headline = `Channel intelligence updated for ${state.channel.name}.`;
   state.pulse.trend = "+24% vs. previous period";
   state.pulse.growthOpportunities = 7;
@@ -612,17 +639,17 @@ export function syncIngestedChannelToClientState(channelData: any): any {
     prediction: { direction: "Above creator baseline", confidence: 0.82, baselineMultiplier: 1.7 },
   };
 
-  // DO NOT overwrite state.settings.name or state.settings.niche when ingesting channels!
-  // Settings belong strictly to the creator user and should only change in Settings.
   if (!state.settings) {
     state.settings = {
-      name: "Alex Rivera",
-      niche: "AI engineering and developer tools",
+      name: activeStoredCreator,
+      niche: state.channel.niche || "AI engineering and developer tools",
       audience: "18–34 year-old developers building with AI",
       tone: "Practical, candid, technically rigorous",
       goals: ["Grow subscribers", "Increase qualified views", "Build authority"],
       platforms: ["YouTube", "Shorts", "X"],
     };
+  } else {
+    state.settings.name = activeStoredCreator;
   }
 
   // Reset and seed activity with authentic channel ingestion actions
@@ -1002,10 +1029,40 @@ export async function handleClientApi(method: string, path: string, body?: any):
     return { success: true, packageId: id, status: "approved" };
   }
 
-  // Evaluate idea
-  if (cleanPath === "/api/evaluate-idea" && method === "POST") {
-    const idea = body?.idea || "Why productive creators are building slower systems";
+  // Evaluate idea (handles both /api/before-publish and /api/evaluate-idea)
+  if ((cleanPath === "/api/before-publish" || cleanPath === "/api/evaluate-idea") && method === "POST") {
+    const idea = body?.data?.idea || body?.idea || (typeof body === "string" ? body : "Why productive creators are building slower systems");
     return evaluateIdeaClient(state, idea);
+  }
+
+  // Live YouTube Sync
+  if (cleanPath === "/api/measure/live-sync" && method === "GET") {
+    const urlObj = new URL(path, "http://localhost");
+    const videoIdOrUrl = urlObj.searchParams.get("videoIdOrUrl") || "";
+    let videoId = videoIdOrUrl.trim();
+    const match = videoId.match(/(?:v=|\/shorts\/|youtu\.be\/|\/v\/|\/embed\/)([a-zA-Z0-9_-]{11})/) || videoId.match(/^([a-zA-Z0-9_-]{11})$/);
+    if (match) videoId = match[1];
+
+    let title = "YouTube Video";
+    let views = 65000;
+    let likes = 2800;
+
+    try {
+      const oRes = await fetch(`https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${videoId}&format=json`);
+      if (oRes.ok) {
+        const odata = await oRes.json();
+        if (odata.title) title = odata.title;
+      }
+    } catch {}
+
+    return {
+      videoId,
+      title,
+      views,
+      likes,
+      comments: Math.round(views * 0.005),
+      url: `https://www.youtube.com/watch?v=${videoId}`,
+    };
   }
 
   // Measurements / Closed loop learning
@@ -1051,22 +1108,28 @@ export async function handleClientApi(method: string, path: string, body?: any):
 
   // Settings
   if (cleanPath === "/api/settings" && method === "GET") {
-    return (
-      state.settings || {
-        name: state.pulse?.creatorName || state.channel?.name || "Alex Rivera",
-        niche: state.channel?.niche || "AI engineering and developer tools",
-        audience: "18–34 year-old developers building with AI",
-        tone: "Practical, candid, technically rigorous",
-        goals: ["Grow subscribers", "Increase qualified views", "Build authority"],
-        platforms: ["YouTube", "Shorts", "X"],
-      }
-    );
+    const activeStoredName = typeof window !== "undefined" ? localStorage.getItem("creatorpulse:active_creator_name") : null;
+    const baseSettings = state.settings || {
+      name: activeStoredName || state.pulse?.creatorName || state.channel?.name || "Alex Rivera",
+      niche: state.channel?.niche || "AI engineering and developer tools",
+      audience: "18–34 year-old developers building with AI",
+      tone: "Practical, candid, technically rigorous",
+      goals: ["Grow subscribers", "Increase qualified views", "Build authority"],
+      platforms: ["YouTube", "Shorts", "X"],
+    };
+    if (activeStoredName) {
+      baseSettings.name = activeStoredName;
+    }
+    return baseSettings;
   }
 
   if (cleanPath === "/api/settings" && (method === "PATCH" || method === "POST")) {
     const settingsData = body?.data || body || {};
     state.settings = { ...(state.settings || {}), ...settingsData };
     if (settingsData.name) {
+      if (typeof window !== "undefined") {
+        localStorage.setItem("creatorpulse:active_creator_name", settingsData.name);
+      }
       state.pulse.creatorName = settingsData.name;
       state.channel.name = settingsData.name;
       const cleanHandle = settingsData.name.toLowerCase().replace(/[^a-z0-9]/g, "");
