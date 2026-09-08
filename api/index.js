@@ -155,189 +155,198 @@ function classifyVideoTopicDynamic(title, desc, channelNiche) {
 }
 
 async function fetchLiveYouTubeCatalog(channelInput) {
-  let cleanInput = channelInput.trim();
-  let handle = cleanInput.startsWith("@") ? cleanInput : `@${cleanInput.replace(/^https?:\/\/(www\.)?youtube\.com\//, "").replace(/^\/?@?/, "")}`;
+  let cleanInput = channelInput.trim()
+    .replace(/^https?:\/\/(www\.)?youtube\.com\//, "")
+    .replace(/^user\//i, "")
+    .replace(/^c\//i, "")
+    .replace(/^channel\//i, "")
+    .replace(/^\/?@?/, "")
+    .split("/")[0]
+    .split("?")[0];
+  let handle = cleanInput.startsWith("UC") ? cleanInput : (cleanInput.startsWith("@") ? cleanInput : `@${cleanInput}`);
   if (!handle || handle === "@") handle = "@fireship";
 
-  const channelUrl = `https://www.youtube.com/${handle}`;
-  const pageRes = await fetch(channelUrl, {
-    headers: {
-      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-      "Accept-Language": "en-US,en;q=0.9",
-    },
-    signal: AbortSignal.timeout(9000),
-  });
+  const fetchUrls = [
+    handle.startsWith("UC") ? `https://www.youtube.com/channel/${handle}/videos` : `https://www.youtube.com/${handle}/videos`,
+    handle.startsWith("UC") ? `https://www.youtube.com/channel/${handle}` : `https://www.youtube.com/${handle}`,
+  ];
 
-  if (!pageRes.ok) {
-    throw new Error(`YouTube channel "${handle}" not found (HTTP ${pageRes.status}).`);
+  let html = "";
+  let lastStatus = 404;
+
+  const headers = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    "Accept-Language": "en-US,en;q=0.9",
+    Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+  };
+
+  for (const url of fetchUrls) {
+    try {
+      const res = await fetch(url, { headers, signal: AbortSignal.timeout(10000) });
+      lastStatus = res.status;
+      if (res.ok) {
+        html = await res.text();
+        if (html.includes("ytInitialData")) break;
+      }
+    } catch {
+      // try next
+    }
   }
 
-  const html = await pageRes.text();
-
-  // Extract channel ID
-  const channelIdMatch =
-    html.match(/<meta itemprop="channelId" content="([^"]+)"/) ||
-    html.match(/<link rel="canonical" href="https:\/\/www\.youtube\.com\/channel\/([^"]+)"/) ||
-    html.match(/"channelId":"(UC[a-zA-Z0-9_-]{22})"/);
-
-  const channelId = channelIdMatch ? channelIdMatch[1] : null;
-  if (!channelId) {
-    throw new Error(`Could not locate canonical channel ID for "${handle}".`);
+  if (!html) {
+    throw new Error(`YouTube channel "${handle}" could not be reached (HTTP ${lastStatus}).`);
   }
 
-  // Extract channel name
-  const titleMatch = html.match(/<meta property="og:title" content="([^"]+)"/) || html.match(/<title>([^<]+)<\/title>/);
-  let channelName = titleMatch ? unescapeHtml(titleMatch[1].replace(/\s*-\s*YouTube$/i, "")) : handle.replace("@", "");
+  const jsonMatch = html.match(/var ytInitialData = ({.*?});<\/script>/s);
+  if (!jsonMatch) {
+    throw new Error(`Could not parse data for "${handle}".`);
+  }
 
-  // Extract description if present
-  const descMatch = html.match(/<meta property="og:description" content="([^"]+)"/);
-  const channelDesc = descMatch ? unescapeHtml(descMatch[1]) : "";
-
-  let rawSubscribers = null;
-  const durationMap = new Map();
-
-  // Extract from ytInitialData (header subscriber count + lockup durations)
+  let data = {};
   try {
-    const jsonMatch = html.match(/var ytInitialData = ({.*?});<\/script>/);
-    if (jsonMatch) {
-      const parsedData = JSON.parse(jsonMatch[1]);
-
-      // 1. Dedicated channel header subscriber count
-      if (parsedData.header) {
-        const headerStr = JSON.stringify(parsedData.header);
-        const headerMatches = [...headerStr.matchAll(/([\d\.]+[KMBkmb]?\s*(?:million|thousand|crore|lakh)?\s*subscribers?)/gi)];
-        for (const hm of headerMatches) {
-          const parsed = parseSubscriberString(hm[1]);
-          if (parsed && parsed > 0) {
-            rawSubscribers = parsed;
-            break;
-          }
-        }
-      }
-
-      // 2. Harvest video durations
-      function harvestDurations(obj) {
-        if (!obj || typeof obj !== "object") return;
-        if (obj.lockupViewModel) {
-          const vm = obj.lockupViewModel;
-          const cid = vm.contentId;
-          const str = JSON.stringify(vm);
-          const colonMatch = str.match(/"(?:text|simpleText)":"(\d{1,2}:\d{2}(?::\d{2})?)"/);
-          if (colonMatch && cid) {
-            durationMap.set(cid, colonMatch[1]);
-          } else {
-            const labelMatch = str.match(/"label":"(\d+)\s*minutes?(?:,\s*(\d+)\s*seconds?)?"/i);
-            if (labelMatch && cid) {
-              const mins = String(parseInt(labelMatch[1], 10)).padStart(2, "0");
-              const secs = String(parseInt(labelMatch[2] || "0", 10)).padStart(2, "0");
-              durationMap.set(cid, `${mins}:${secs}`);
-            }
-          }
-        }
-        if (obj.videoRenderer) {
-          const vr = obj.videoRenderer;
-          const cid = vr.videoId;
-          const dur = vr.lengthText?.simpleText;
-          if (dur && cid) durationMap.set(cid, dur);
-        }
-        for (const v of Object.values(obj)) harvestDurations(v);
-      }
-      harvestDurations(parsedData);
-    }
+    data = JSON.parse(jsonMatch[1]);
   } catch (err) {
-    // Gracefully handle ytInitialData parse errors
+    throw new Error(`Failed to parse YouTube data: ${err.message}`);
   }
 
-  // Fallback 1: Dedicated header view model regex
-  if (!rawSubscribers) {
-    const phm = html.match(/"pageHeaderViewModel"[\s\S]{1,2500}?"content":\{"dynamicTextViewModel":\{"text":\{"content":"([^"]+subscribers?)"/i) ||
-      html.match(/"c4TabbedHeaderRenderer"[\s\S]{1,1000}?"subscriberCountText":\{"accessibility":\{"accessibilityData":\{"label":"([^"]+)"\}\}/i);
-    if (phm) {
-      rawSubscribers = parseSubscriberString(phm[1]);
+  let channelName = handle.replace("@", "");
+  let rawSubscribers = null;
+  let channelDesc = "";
+
+  // 1. Channel Name & Subscribers from pageHeaderRenderer or c4TabbedHeaderRenderer
+  if (data.header) {
+    const h = data.header;
+    if (h.pageHeaderRenderer) {
+      const phr = h.pageHeaderRenderer;
+      if (phr.pageTitle) channelName = unescapeHtml(phr.pageTitle);
+      const hStr = JSON.stringify(phr);
+      const subMatches = [...hStr.matchAll(/([\d\.]+[KMBkmb]?\s*(?:million|thousand|crore|lakh)?\s*subscribers?)/gi)];
+      for (const sm of subMatches) {
+        const parsed = parseSubscriberString(sm[1]);
+        if (parsed && parsed > 0) {
+          rawSubscribers = parsed;
+          break;
+        }
+      }
+    } else if (h.c4TabbedHeaderRenderer) {
+      const c4 = h.c4TabbedHeaderRenderer;
+      if (c4.title) channelName = unescapeHtml(c4.title);
+      const subText = c4.subscriberCountText?.simpleText || c4.subscriberCountText?.accessibility?.accessibilityData?.label;
+      if (subText) rawSubscribers = parseSubscriberString(subText);
     }
   }
 
-  // Fallback 2: Top channel header section of HTML only (avoiding recommendations)
+  // Fallback subscriber count from HTML text
   if (!rawSubscribers) {
-    const topChunk = html.slice(0, 100000);
-    const topMatch = topChunk.match(/([\d\.]+[KMBkmb]?\s*(?:million|thousand|crore|lakh)?\s*subscribers?)/i);
-    if (topMatch) {
-      rawSubscribers = parseSubscriberString(topMatch[1]);
+    const subMatches = [...html.matchAll(/"subscriberCountText":\{"accessibility":\{"accessibilityData":\{"label":"([^"]+)"/gi)];
+    for (const sm of subMatches) {
+      const parsed = parseSubscriberString(sm[1]);
+      if (parsed && parsed > 0) {
+        rawSubscribers = parsed;
+        break;
+      }
     }
   }
 
-  // Fetch Atom RSS Feed
-  const feedUrl = `https://www.youtube.com/feeds/videos.xml?channel_id=${channelId}`;
-  const feedRes = await fetch(feedUrl, {
-    headers: { "User-Agent": "Mozilla/5.0" },
-    signal: AbortSignal.timeout(9000),
-  });
-
-  if (!feedRes.ok) {
-    throw new Error(`Failed to load video RSS feed for "${channelName}" (HTTP ${feedRes.status}).`);
+  if (data.metadata?.channelMetadataRenderer) {
+    const meta = data.metadata.channelMetadataRenderer;
+    if (meta.title && channelName === handle.replace("@", "")) channelName = unescapeHtml(meta.title);
+    if (meta.description) channelDesc = unescapeHtml(meta.description);
   }
 
-  const xml = await feedRes.text();
-  const entryRegex = /<entry>([\s\S]*?)<\/entry>/g;
-  const videos = [];
-  let match;
+  // 2. Harvest Real Videos
+  const rawVideos = [];
+  const seenIds = new Set();
 
-  while ((match = entryRegex.exec(xml)) !== null && videos.length < 15) {
-    const chunk = match[1];
-    const idMatch = chunk.match(/<yt:videoId>([^<]+)<\/yt:videoId>/);
-    const vTitleMatch = chunk.match(/<title>([^<]+)<\/title>/);
-    const pubMatch = chunk.match(/<published>([^<]+)<\/published>/);
-    const viewsMatch = chunk.match(/<media:statistics\s+views="(\d+)"/);
-    const descChunkMatch = chunk.match(/<media:description>([\s\S]*?)<\/media:description>/);
+  function harvest(obj) {
+    if (!obj || typeof obj !== "object") return;
 
-    if (!idMatch || !vTitleMatch) continue;
+    if (obj.lockupViewModel && obj.lockupViewModel.contentId) {
+      const vm = obj.lockupViewModel;
+      const id = vm.contentId;
+      if (/^[a-zA-Z0-9_-]{11}$/.test(id) && !seenIds.has(id)) {
+        seenIds.add(id);
+        const title = vm.metadata?.lockupMetadataViewModel?.title?.content;
+        const str = JSON.stringify(vm);
+        const viewsMatch = str.match(/([\d\.]+[KMBkmb]?\s*views)/i);
+        const timeMatch = str.match(/(\d+\s*(?:day|days|week|weeks|month|months|year|years|hour|hours|minute|minutes)\s*ago)/i);
+        const durMatch = str.match(/"text":"(\d{1,2}:\d{2}(?::\d{2})?)"/);
+        const label = vm.rendererContext?.accessibilityContext?.label || "";
 
-    const vid = idMatch[1];
-    const rawTitle = unescapeHtml(vTitleMatch[1]);
-    const rawVideoDesc = descChunkMatch ? unescapeHtml(descChunkMatch[1]) : "";
-    const views = viewsMatch ? parseInt(viewsMatch[1], 10) : 45000;
-    const publishedAt = pubMatch ? pubMatch[1].split("T")[0] : new Date().toISOString().split("T")[0];
+        let duration = durMatch ? durMatch[1] : null;
+        if (!duration) {
+          const durTextMatch = label.match(/(\d+)\s*minutes?(?:,\s*(\d+)\s*seconds?)?/i);
+          if (durTextMatch) {
+            duration = `${String(durTextMatch[1]).padStart(2, "0")}:${String(durTextMatch[2] || "00").padStart(2, "0")}`;
+          } else {
+            duration = "12:00";
+          }
+        }
 
-    const format = inferVideoFormat(rawTitle, rawVideoDesc);
-    const resolvedDuration = durationMap.get(vid) || (format === "Short form" ? "00:58" : "03:45");
+        if (title) {
+          const views = parseSubscriberString(viewsMatch ? viewsMatch[1].replace(/views?/i, "") : null) || 45000;
+          rawVideos.push({
+            id,
+            title: unescapeHtml(title),
+            views,
+            duration,
+            publishedAt: new Date().toISOString().split("T")[0],
+            engagementRate: Number((Math.min(12, Math.max(4.5, 9.5 - Math.log10(Math.max(100, views)) * 0.8))).toFixed(1)),
+            format: inferVideoFormat(title, label),
+            hook: unescapeHtml(title),
+          });
+        }
+      }
+    }
 
-    videos.push({
-      id: vid,
-      title: rawTitle,
-      topic: "", // will classify after detecting channel niche
-      format,
-      views,
-      engagementRate: Number((Math.min(12, Math.max(4.5, 9.5 - Math.log10(Math.max(100, views)) * 0.8))).toFixed(1)),
-      publishedAt,
-      duration: resolvedDuration,
-      hook: rawTitle,
-      description: rawVideoDesc,
-    });
+    if (obj.videoRenderer && obj.videoRenderer.videoId) {
+      const vr = obj.videoRenderer;
+      const id = vr.videoId;
+      if (/^[a-zA-Z0-9_-]{11}$/.test(id) && !seenIds.has(id)) {
+        seenIds.add(id);
+        const title = vr.title?.runs?.[0]?.text || vr.title?.simpleText;
+        const viewsStr = vr.viewCountText?.simpleText || vr.viewCountText?.runs?.map((r) => r.text).join("");
+        const durStr = vr.lengthText?.simpleText || "10:00";
+        if (title) {
+          const views = parseSubscriberString(viewsStr ? viewsStr.replace(/views?/i, "") : null) || 45000;
+          rawVideos.push({
+            id,
+            title: unescapeHtml(title),
+            views,
+            duration: durStr,
+            publishedAt: new Date().toISOString().split("T")[0],
+            engagementRate: Number((Math.min(12, Math.max(4.5, 9.5 - Math.log10(Math.max(100, views)) * 0.8))).toFixed(1)),
+            format: inferVideoFormat(title, ""),
+            hook: unescapeHtml(title),
+          });
+        }
+      }
+    }
+
+    for (const k of Object.keys(obj)) harvest(obj[k]);
   }
 
-  if (videos.length === 0) {
-    throw new Error(`Channel "${channelName}" has no public uploads.`);
+  harvest(data);
+
+  if (rawVideos.length === 0) {
+    throw new Error(`No public uploads found for "${channelName}". Channel may be empty or restricted.`);
   }
 
-  // Detect dynamic niche based on actual content
-  const detectedNiche = detectChannelNiche(channelName, channelDesc, videos);
+  const detectedNiche = detectChannelNiche(channelName, channelDesc, rawVideos);
+  const videos = rawVideos.map((v) => ({
+    ...v,
+    topic: classifyVideoTopicDynamic(v.title, "", detectedNiche),
+  }));
 
-  // Classify each video's topic based on detected niche
-  for (const v of videos) {
-    v.topic = classifyVideoTopicDynamic(v.title, v.description, detectedNiche);
-    delete v.description;
-  }
-
-  // Calculate realistic subscribers if not found directly
   const totalViews = videos.reduce((s, v) => s + (v.views || 0), 0);
   const avgViews = Math.round(totalViews / videos.length);
-  const subscribers = rawSubscribers !== null
+  const subscribers = rawSubscribers !== null && rawSubscribers > 0
     ? rawSubscribers
-    : Math.max(1, Math.round(avgViews * 0.6));
+    : Math.max(1000, Math.round(avgViews * 0.8));
 
   return {
     name: channelName,
-    handle,
+    handle: handle.startsWith("@") ? handle : `@${handle}`,
     niche: detectedNiche,
     subscribers,
     dataMode: `Live YouTube public catalog · Ingested live via YouTube public feed (${videos.length} real uploads)`,
@@ -494,60 +503,10 @@ export default async function handler(req, res) {
       try {
         const liveData = await fetchLiveYouTubeCatalog(channelInput);
         res.status(200).json(liveData);
-      } catch (fetchErr) {
-        // If channel is not public on YouTube or fetch fails, provide a tailored creator catalog
-        const handle = channelInput.startsWith("@") ? channelInput : `@${channelInput}`;
-        const name = body.channelName || handle.replace("@", "");
-        const niche = body.niche || "Software Engineering & Tech";
-        const primaryTopic = niche.split(/[&,]/)[0].trim() || "Engineering";
-        const secondaryTopic = niche.split(/[&,]/)[1]?.trim() || "Workflows";
-
-        res.status(200).json({
-          name,
-          handle,
-          niche,
-          subscribers: 42000,
-          dataMode: `Custom Creator Catalog · Tailored for ${handle} (Custom Channel Profile)`,
-          videos: [
-            {
-              id: `${handle.replace(/[^a-zA-Z0-9]/g, "")}-v1`,
-              title: `How I built my first ${primaryTopic} system from scratch`,
-              topic: primaryTopic,
-              format: "Practical tutorial",
-              views: 54200,
-              engagementRate: 8.1,
-              publishedAt: "2026-08-22",
-              duration: "14:32",
-              hook: `The true engineering bottleneck in ${primaryTopic.toLowerCase()} is not what most people think.`,
-            },
-            {
-              id: `${handle.replace(/[^a-zA-Z0-9]/g, "")}-v2`,
-              title: `The architecture mistakes I made in ${secondaryTopic}`,
-              topic: secondaryTopic,
-              format: "Deep dive",
-              views: 43100,
-              engagementRate: 7.2,
-              publishedAt: "2026-08-11",
-              duration: "18:10",
-              hook: `Here are 3 production failure modes you will hit before scale.`,
-            },
-            {
-              id: `${handle.replace(/[^a-zA-Z0-9]/g, "")}-v3`,
-              title: `5 essential tools for modern ${primaryTopic.toLowerCase()} in 2026`,
-              topic: primaryTopic,
-              format: "Listicle",
-              views: 69400,
-              engagementRate: 8.6,
-              publishedAt: "2026-07-28",
-              duration: "11:06",
-              hook: `Stop stacking redundant frameworks when these 5 primitives solve 90% of use cases.`,
-            },
-          ],
-          topics: [
-            { name: primaryTopic, views: 123600, performance: "Excellent", audienceFit: 92, saturation: 35 },
-            { name: secondaryTopic, views: 43100, performance: "Strong", audienceFit: 84, saturation: 42 },
-          ],
+        res.status(400).json({
+          error: `Could not fetch public YouTube channel for "${channelInput}". Please check the handle spelling (e.g. @MrBeast, @mkbhd, @fireship). Details: ${fetchErr.message || "Unknown error"}`,
         });
+        return;
       }
     } catch (err) {
       res.status(400).json({ error: err.message || "Failed to ingest channel" });

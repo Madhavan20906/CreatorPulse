@@ -1,4 +1,4 @@
-import { Activity, ArrowUpRight, BarChart3, Check, CheckCircle2, ChevronRight, CircleAlert, Clock3, Copy, Download, FileText, Filter, Info, Play, Plus, RefreshCw, ShieldCheck, Sparkles, Target, TrendingUp, Upload, Users, Wand2, X } from 'lucide-react';
+import { Activity, ArrowUpRight, BarChart3, Check, CheckCircle2, ChevronRight, CircleAlert, Clock3, Copy, Download, ExternalLink, FileText, Filter, Info, Play, Plus, RefreshCw, ShieldCheck, Sparkles, Target, TrendingUp, Upload, Users, Wand2, X } from 'lucide-react';
 import { FormEvent, useEffect, useState } from 'react';
 import { Link, useLocation, useParams } from 'wouter';
 import { useQueryClient } from '@tanstack/react-query';
@@ -834,7 +834,7 @@ export function Channel() {
 
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <span className="mono text-[10px] text-[#9da0b0]">Quick Real Presets:</span>
-          {['@fireship', '@mkbhd', '@veritasium', '@lexfridman'].map((h) => (
+          {['@MrBeast', '@fireship', '@mkbhd', '@veritasium', '@lexfridman'].map((h) => (
             <button
               key={h}
               type="button"
@@ -986,6 +986,18 @@ export function Channel() {
                     <div className="mono text-xs font-bold">{money(v.views)}</div>
                     <div className="mono mt-1 text-[9px] text-[#72920f]">{v.engagementRate}% ER</div>
                   </div>
+                  {/^[a-zA-Z0-9_-]{11}$/.test(v.id) && (
+                    <a
+                      href={`https://www.youtube.com/watch?v=${v.id}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      className="rounded-lg p-2 text-muted-foreground hover:text-[#ff0033] hover:bg-secondary transition-colors"
+                      title="Watch on YouTube"
+                    >
+                      <ExternalLink size={16} />
+                    </a>
+                  )}
                   <ChevronRight className="text-muted-foreground transition-transform group-hover:translate-x-1 group-hover:text-primary" size={16} />
                 </div>
               ))}
@@ -1183,6 +1195,18 @@ export function Channel() {
                   <span>{selectedVideo.publishedAt}</span>
                 </div>
                 <h3 className="display mt-2 text-xl font-bold leading-snug">{selectedVideo.title}</h3>
+                {/^[a-zA-Z0-9_-]{11}$/.test(selectedVideo.id) && (
+                  <a
+                    href={`https://www.youtube.com/watch?v=${selectedVideo.id}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="mt-2 inline-flex items-center gap-1.5 mono text-[11px] font-bold text-[#ff0033] hover:underline"
+                    data-testid="link-watch-on-youtube-header"
+                  >
+                    <ExternalLink size={13} />
+                    <span>Watch on YouTube (youtube.com/watch?v={selectedVideo.id})</span>
+                  </a>
+                )}
               </div>
               <button
                 onClick={() => setSelectedVideo(null)}
@@ -1218,6 +1242,17 @@ export function Channel() {
             </div>
 
             <div className="mt-6 flex flex-col sm:flex-row items-center justify-end gap-2.5 border-t border-border/70 pt-4">
+              {/^[a-zA-Z0-9_-]{11}$/.test(selectedVideo.id) && (
+                <a
+                  href={`https://www.youtube.com/watch?v=${selectedVideo.id}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 rounded-xl border border-[#ff0033]/40 bg-[#ff0033]/10 px-4 py-2.5 text-xs font-bold text-[#ff0033] hover:bg-[#ff0033]/20 transition-colors"
+                  data-testid="button-watch-youtube"
+                >
+                  <Play size={14} className="fill-[#ff0033]" /> Watch on YouTube
+                </a>
+              )}
               <Link
                 href={`/before-publish?idea=${encodeURIComponent(`Counterfactual test: Remaking "${selectedVideo.title}"`)}`}
                 className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 rounded-xl border border-border bg-card px-4 py-2.5 text-xs font-bold text-foreground hover:bg-secondary transition-colors"

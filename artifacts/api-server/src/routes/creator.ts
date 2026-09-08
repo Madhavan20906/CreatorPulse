@@ -108,51 +108,10 @@ router.post("/channel/ingest", async (req, res): Promise<void> => {
         resolvedVideos = JSON.parse(JSON.stringify(p.videos));
         dataMode = `${p.name} verified snapshot · Offline resilience fallback (${p.videos.length} videos)`;
       } else {
-        const handle = rawInput.startsWith("@") ? rawInput : `@${rawInput}`;
-        resolvedName = channelName || handle.replace("@", "");
-        resolvedHandle = handle;
-        resolvedNiche = niche || "Software Engineering & Tech";
-        resolvedSubscribers = 42000;
-        dataMode = `Custom Creator Catalog · Tailored for ${handle}`;
-
-        const primaryTopic = resolvedNiche.split(/[&,]/)[0].trim() || "Engineering";
-        const secondaryTopic = resolvedNiche.split(/[&,]/)[1]?.trim() || "Workflows";
-
-        resolvedVideos = [
-          {
-            id: `${handle.replace(/[^a-zA-Z0-9]/g, "")}-v1`,
-            title: `How I built my first ${primaryTopic} system from scratch`,
-            topic: primaryTopic,
-            format: "Practical tutorial",
-            views: 54200,
-            engagementRate: 8.1,
-            publishedAt: "2026-08-22",
-            duration: "14:32",
-            hook: `The true engineering bottleneck in ${primaryTopic.toLowerCase()} is not what most people think.`,
-          },
-          {
-            id: `${handle.replace(/[^a-zA-Z0-9]/g, "")}-v2`,
-            title: `The architecture mistakes I made in ${secondaryTopic}`,
-            topic: secondaryTopic,
-            format: "Deep dive",
-            views: 43100,
-            engagementRate: 7.2,
-            publishedAt: "2026-08-11",
-            duration: "18:10",
-            hook: `Here are 3 production failure modes you will hit before scale.`,
-          },
-          {
-            id: `${handle.replace(/[^a-zA-Z0-9]/g, "")}-v3`,
-            title: `5 essential tools for modern ${primaryTopic.toLowerCase()} in 2026`,
-            topic: primaryTopic,
-            format: "Listicle",
-            views: 69400,
-            engagementRate: 8.6,
-            publishedAt: "2026-07-28",
-            duration: "11:06",
-            hook: `Stop stacking redundant frameworks when these 5 primitives solve 90% of use cases.`,
-          },
-        ];
+        res.status(400).json({
+          error: `Could not fetch public YouTube channel for "${rawInput}". Please check the handle spelling (e.g. @MrBeast, @mkbhd, @fireship). Details: ${fetchErr.message || "Unknown error"}`,
+        });
+        return;
       }
     }
   } else {
