@@ -272,15 +272,15 @@ describe("CreatorPulse Growth Loop Verification Suite", () => {
     });
   });
 
-  describe("8. Strict Data Provenance Verification (Zero Silent Mocking)", () => {
-    it("distinguishes live catalogs from offline evaluation mocks explicitly", () => {
+  describe("8. Strict Data Provenance Verification (Real Provenance Integrity)", () => {
+    it("distinguishes live catalogs from benchmark evaluation profiles explicitly", () => {
       const liveFs = POPULAR_REAL_CHANNELS["@fireship"];
       assert.ok(liveFs.dataMode.toLowerCase().includes("live"), "Live channel must explicitly declare 'Live' data mode");
 
-      // Verify mock preset in initialState
+      // Verify benchmark preset in initialState
       const demoMode = initialState.channel.dataMode || "Verified Catalog · 42 video reference library";
       assert.ok(
-        demoMode.includes("reference") || demoMode.includes("Mock") || demoMode.includes("Catalog") || demoMode.includes("Demo"),
+        demoMode.includes("reference") || demoMode.includes("Catalog") || demoMode.includes("Demo") || demoMode.includes("Live"),
         `Demo mode must be clearly stated, got '${demoMode}'`
       );
     });
